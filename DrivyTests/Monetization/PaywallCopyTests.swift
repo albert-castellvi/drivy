@@ -54,4 +54,22 @@ final class PaywallCopyTests: XCTestCase {
             "Las estadísticas avanzadas son Premium."
         )
     }
+
+    // MARK: - Streak repair (S8)
+
+    func testStreakRepairCopy() {
+        XCTAssertEqual(PaywallCopy.streakRepairButtonTitle, "Recuperar racha")
+        XCTAssertEqual(
+            PaywallCopy.streakRepairWindowMessage,
+            "Tu racha se rompió hace menos de 48 horas. Puedes recuperarla."
+        )
+        XCTAssertEqual(
+            PaywallCopy.streakRepairUpsellMessage,
+            "Recuperar una racha rota es Premium. Puedes repararla durante las 48 horas siguientes."
+        )
+        XCTAssertEqual(
+            PaywallCopy.streakRepairCoolingDownMessage,
+            "Solo puedes recuperar la racha una vez cada 30 días."
+        )
+    }
 }

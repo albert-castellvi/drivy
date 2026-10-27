@@ -58,4 +58,21 @@ enum PaywallCopy {
         "El plan Free permite 1 liga. Hazte Premium para crear o unirte a más."
 
     static let advancedStatsLockedMessage = "Las estadísticas avanzadas son Premium."
+
+    // MARK: - Streak repair (S8)
+
+    /// Button of the repair when the plan allows it.
+    static let streakRepairButtonTitle = "Recuperar racha"
+
+    /// Why the repair is on offer: the free plan sees this next to the upsell.
+    static let streakRepairWindowMessage =
+        "Tu racha se rompió hace menos de 48 horas. Puedes recuperarla."
+
+    /// Free plan: the repair is a Premium advantage, so the card upsells it.
+    static let streakRepairUpsellMessage =
+        "Recuperar una racha rota es Premium. Puedes repararla durante las 48 horas siguientes."
+
+    /// Premium, but the last repair is younger than the 30-day cooldown (S8).
+    static let streakRepairCoolingDownMessage =
+        "Solo puedes recuperar la racha una vez cada 30 días."
 }

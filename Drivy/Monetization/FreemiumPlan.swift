@@ -23,6 +23,32 @@ enum FreemiumLimits {
     /// This cap is a limit of the free plan itself, so it also applies during
     /// the 7-day history window.
     static let freeMaxLeagues = 1
+
+    // MARK: - Streak (S8)
+
+    /// Freezes ("hielos") of S1 the free plan gets each ISO week. They are not
+    /// carried over to the next week, so the allowance is a weekly budget.
+    static let freeWeeklyFreezes = 1
+
+    /// Premium gets three freezes per week (S1, S8).
+    static let premiumWeeklyFreezes = 3
+
+    /// S8: a broken streak can be repaired once every 30 days.
+    static let streakRepairCooldownDays = 30
+
+    /// S8: the repair window, counted from the end of the day that broke the run
+    /// (that is when the break is committed).
+    static let streakRepairWindowHours = 48
+
+    /// S1/S8: freezes of the week for one plan.
+    static func weeklyFreezes(for plan: FreemiumPlan) -> Int {
+        switch plan {
+        case .free:
+            return freeWeeklyFreezes
+        case .premium:
+            return premiumWeeklyFreezes
+        }
+    }
 }
 
 /// Snapshot of the gating rules for one plan (S9).
@@ -34,6 +60,7 @@ enum FreemiumLimits {
 /// - history list and drive detail → `canViewHistory(date:)`
 /// - "create league" / "join league" → `canCreateLeague(count:)`
 /// - advanced stats → `canUseAdvancedStats`
+/// - streak card → `weeklyFreezes` (S1) and `canRepairStreak(...)` (S8)
 struct FreemiumAccess: Equatable {
 
     let plan: FreemiumPlan
@@ -103,5 +130,53 @@ struct FreemiumAccess: Equatable {
     /// Advanced stats are premium only (S9).
     var canUseAdvancedStats: Bool {
         isPremium
+    }
+
+    // MARK: - Streak (S8)
+
+    /// S1/S8: freezes the plan has this ISO week. Free 1, Premium 3.
+    var weeklyFreezes: Int {
+        FreemiumLimits.weeklyFreezes(for: plan)
+    }
+
+    /// S8: repairing a broken streak is a Premium advantage, only inside the 48 h
+    /// that follow the end of the broken day, and at most once every 30 days.
+    ///
+    /// `brokenDay` is the day the run broke (`Streak.repairableDay` holds the same
+    /// day when it is still inside the window); it is a parameter because the
+    /// window is a property of that day, not of the snapshot.
+    /// `lastRepairAt` is the newest row of `public.streak_repairs`, `nil` when the
+    /// user never used the repair.
+    func canRepairStreak(brokenDay: Date?, lastRepairAt: Date?, now repairNow: Date) -> Bool {
+        guard isPremium, let brokenDay else { return false }
+
+        // S8: the break happens when the broken day ends, so the window opens there.
+        guard
+            let brokenDayEnd = calendar.date(
+                byAdding: .day,
+                value: 1,
+                to: calendar.startOfDay(for: brokenDay)
+            ),
+            let deadline = calendar.date(
+                byAdding: .hour,
+                value: FreemiumLimits.streakRepairWindowHours,
+                to: brokenDayEnd
+            ),
+            repairNow < deadline
+        else {
+            return false
+        }
+
+        guard let lastRepairAt else { return true }
+        guard
+            let nextAllowed = calendar.date(
+                byAdding: .day,
+                value: FreemiumLimits.streakRepairCooldownDays,
+                to: lastRepairAt
+            )
+        else {
+            return false
+        }
+        return repairNow >= nextAllowed
     }
 }

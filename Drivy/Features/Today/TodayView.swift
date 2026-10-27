@@ -1,12 +1,16 @@
 import SwiftUI
 import UIKit
 
-/// Tab "Hoy" (S4, S6): manual drive recording, today's Driver Score, the streak
-/// and the list of the day's drives.
+/// Tab "Hoy" (S1, S4, S6): manual drive recording, today's Driver Score, the streak
+/// v2, the XP, the quests of the day, the theory lesson and the list of the day's
+/// drives.
 ///
 /// It is also where S9 shows up: the paywall after the first completed drive (once
 /// ever, never blocking) and the entry point to the Histórico, which is gated by the
 /// plan in force.
+///
+/// Nothing on this screen invites the user to drive: the streak, the quests and the
+/// lesson are all reachable without a car (S1, S6, S7).
 struct TodayView: View {
 
     @EnvironmentObject private var auth: AuthViewModel
@@ -31,11 +35,28 @@ struct TodayView: View {
     private let paywallGate = FirstDrivePaywallGate()
 
     /// Sheets of the tab, in one enum so two `.sheet` modifiers cannot fight.
-    private enum ActiveSheet: String, Identifiable {
+    private enum ActiveSheet: Identifiable {
+        /// Share card (S9).
         case shareCard
+        /// Paywall after the first drive and from the gating hook points (S9).
         case paywall
+        /// Post-drive summary (S2): shown before the paywall, never instead of it.
+        case debrief(DriveRecord)
+        /// Theory lesson of the day (S2).
+        case lesson
 
-        var id: String { rawValue }
+        var id: String {
+            switch self {
+            case .shareCard:
+                return "shareCard"
+            case .paywall:
+                return "paywall"
+            case .debrief(let record):
+                return "debrief-\(record.startedAt.timeIntervalSince1970)"
+            case .lesson:
+                return "lesson"
+            }
+        }
     }
 
     var body: some View {
@@ -52,6 +73,9 @@ struct TodayView: View {
 
                     scoreCard
                     streakCard
+                    xpCard
+                    questsSection
+                    lessonCard
                     drivesSection
 
                     if let errorMessage = model.errorMessage {
@@ -76,15 +100,25 @@ struct TodayView: View {
             }
             // The plan can arrive after the drive (StoreKit is read at sign-in and
             // on every transaction update), and S9 asks for the paywall once the
-            // plan is known to be Free.
-            .onChange(of: freemium.plan) { _, _ in presentPaywallIfNeeded() }
-            .sheet(item: $activeSheet) { sheet in
+            // plan is known to be Free. The freezes of the streak (S1/S8) also
+            // depend on it.
+            .onChange(of: freemium.plan) { _, _ in
+                Task {
+                    await reload()
+                    presentPaywallIfNeeded()
+                }
+            }
+            .sheet(item: $activeSheet, onDismiss: sheetDidClose) { sheet in
                 switch sheet {
                 case .shareCard:
                     ShareCardSheet(userID: signedInUserID)
                 case .paywall:
                     PaywallPresenter(freemium: freemium)
                         .makePaywallView(onClose: { activeSheet = nil })
+                case .debrief(let record):
+                    DriveDebriefView(record: record, onClose: { activeSheet = nil })
+                case .lesson:
+                    LessonQuizView(onFinished: { _, _ in activeSheet = nil })
                 }
             }
             // S5: coming back to the app during a drive means the phone was
@@ -127,6 +161,8 @@ struct TodayView: View {
         .drivyCard()
     }
 
+    /// Streak v2 (S1): the run, what today needs, the freezes of the week and,
+    /// when a break is inside the S8 window, the premium repair or its upsell.
     private var streakCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Racha", systemImage: "flame.fill")
@@ -139,6 +175,151 @@ struct TodayView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Label(model.snapshot.streak.freezeText, systemImage: "snowflake")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            repairSection
+        }
+        .drivyCard()
+    }
+
+    /// S8: the repair is a Premium advantage, so the free plan sees the upsell
+    /// here instead of the action.
+    @ViewBuilder
+    private var repairSection: some View {
+        if model.snapshot.streak.repairableDay != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(PaywallCopy.streakRepairWindowMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                switch StreakRepairGate.decision(
+                    streak: model.snapshot.streak,
+                    access: freemium.access,
+                    lastRepairAt: model.snapshot.lastStreakRepairAt,
+                    now: Date()
+                ) {
+                case .allowed:
+                    Button {
+                        Task { await repairStreak() }
+                    } label: {
+                        Text(StreakRepairGate.buttonTitle)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                case .locked:
+                    Text(StreakRepairGate.upsellMessage)
+                        .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        activeSheet = .paywall
+                    } label: {
+                        Text(PaywallCopy.title)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                case .coolingDown(_):
+                    Text(PaywallCopy.streakRepairCoolingDownMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                case .nothingToRepair, .unavailable:
+                    EmptyView()
+                }
+            }
+        }
+    }
+
+    /// S4: lifetime XP and the XP of this week. It is a figure that only grows and
+    /// never scales with km.
+    @ViewBuilder
+    private var xpCard: some View {
+        if let xp = model.snapshot.xp {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("XP", systemImage: "sparkles")
+                    .font(.headline)
+
+                HStack(spacing: 12) {
+                    DriveMetric(title: "Total", value: "\(xp.totalXP) XP")
+                    DriveMetric(title: "Esta semana", value: "\(xp.weekXP) XP")
+                }
+
+                Text("El XP premia cómo conduces y lo que aprendes, nunca los kilómetros.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .drivyCard()
+        }
+    }
+
+    /// S6: the three quests of the day.
+    @ViewBuilder
+    private var questsSection: some View {
+        if !model.snapshot.quests.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Misiones de hoy", systemImage: "target")
+                    .font(.headline)
+
+                ForEach(model.snapshot.quests) { progress in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: progress.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(progress.isCompleted ? Color.accentColor : Color.secondary)
+                            .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(progress.quest.title)
+                                .font(.subheadline.weight(.medium))
+
+                            Text(progress.quest.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+                    // One element per quest: the icon only repeats the state the
+                    // title already has next to it.
+                    .accessibilityElement(children: .combine)
+                }
+
+                Text("Se renuevan cada día. Ninguna misión pide conducir más.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .drivyCard()
+        }
+    }
+
+    /// S2: the one-minute theory lesson, which is also a way to make the day count
+    /// without a car (S1).
+    private var lessonCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Lección de hoy", systemImage: "text.book.closed.fill")
+                .font(.headline)
+
+            Text(lessonMessage)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                activeSheet = .lesson
+            } label: {
+                Text(lessonButtonTitle)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
         }
         .drivyCard()
     }
@@ -193,6 +374,18 @@ struct TodayView: View {
         .buttonStyle(.bordered)
     }
 
+    // MARK: - Copy of the lesson card
+
+    private var lessonMessage: String {
+        model.snapshot.hasLessonToday
+            ? "Ya has hecho la lección de hoy: cuenta para tu racha."
+            : "Un minuto de teoría. Hacerla ya hace que el día cuente para la racha, aunque no cojas el coche."
+    }
+
+    private var lessonButtonTitle: String {
+        model.snapshot.hasLessonToday ? "Repasar la lección" : "Hacer la lección (1 minuto)"
+    }
+
     // MARK: - S9 hooks
 
     /// Everything that has to happen once the recorder has a finished drive.
@@ -201,6 +394,10 @@ struct TodayView: View {
     /// session, and the detail screen of the drive that just finished reads it from
     /// `LocalRouteStore`. Nothing here can block the recording that already ended
     /// (S9/S12).
+    ///
+    /// The post-drive summary (S2) comes first and the paywall waits for it: L9
+    /// fixed the order debrief → paywall, and two sheets cannot be on screen at the
+    /// same time.
     private func handleCompletedDrive(_ drive: DriveRecord) {
         RouteHandoff.store(coordinates: recorder.routeCoordinates, startedAt: drive.startedAt)
 
@@ -208,13 +405,19 @@ struct TodayView: View {
         // profile is older. Done once per account.
         freemiumSession.recordCompletedDrive(startedAt: drive.startedAt)
 
-        presentPaywallIfNeeded()
+        activeSheet = .debrief(drive)
 
-        Task {
-            await reload()
-            // The reload is what makes today's drive count (and the plan read) known.
-            presentPaywallIfNeeded()
-        }
+        Task { await reload() }
+    }
+
+    /// Any sheet of the tab closed.
+    ///
+    /// It runs after the dismissal, so the S9 paywall that follows the debrief of a
+    /// drive never races the animation, and the day is read again (the lesson, the
+    /// repair and the quests all change what Hoy shows).
+    private func sheetDidClose() {
+        presentPaywallIfNeeded()
+        Task { await reload() }
     }
 
     /// S9: the paywall appears after the first completed drive, once ever, and only
@@ -224,6 +427,10 @@ struct TodayView: View {
         // arrives later (StoreKit is slow, or the user just purchased) must not turn
         // a launch into an ad for drives recorded days ago.
         guard recorder.lastCompletedDrive != nil else { return }
+
+        // One sheet at a time: while the debrief or the lesson owns the screen the
+        // paywall waits, and it is offered again as soon as it closes.
+        guard activeSheet == nil else { return }
 
         let completedDriveCount = max(model.snapshot.drivesCount, 1)
 
@@ -244,7 +451,19 @@ struct TodayView: View {
 
     private func reload() async {
         guard let userID = auth.signedInUser?.id else { return }
-        await model.load(userID: userID)
+        await model.load(userID: userID, plan: freemium.plan)
+    }
+
+    /// S8: records the repair of the broken day and reads the day again so the run
+    /// comes back on screen.
+    private func repairStreak() async {
+        guard let brokenDay = model.snapshot.streak.repairableDay else { return }
+
+        await model.repairStreak(brokenDay: brokenDay)
+        // A failed repair keeps its message on screen: reloading would clear it.
+        guard model.errorMessage == nil else { return }
+
+        await reload()
     }
 }
 

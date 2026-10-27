@@ -39,7 +39,16 @@ struct ShareCardView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Label(model.streakText, systemImage: "flame.fill")
-                Label(model.leagueText, systemImage: "trophy.fill")
+
+                // S9: the public division replaces the empty "no league" line; the
+                // weekly position of the private league stays next to it when there
+                // is one.
+                if let divisionText = model.divisionText {
+                    Label(divisionText, systemImage: "trophy.fill")
+                }
+                if model.showsLeagueLine {
+                    Label(model.leagueText, systemImage: "person.3.fill")
+                }
             }
             .font(.subheadline.weight(.medium))
 
@@ -79,14 +88,27 @@ enum ShareCardRenderer {
 }
 
 #Preview {
-    ShareCardView(
-        model: ShareCardModel(
-            score: 87,
-            streakDays: 3,
-            leaguePosition: 2,
-            leagueName: "Los del barrio",
-            leagueSize: 4
+    VStack(spacing: 16) {
+        ShareCardView(
+            model: ShareCardModel(
+                score: 87,
+                streakDays: 3,
+                leaguePosition: 2,
+                leagueName: "Los del barrio",
+                leagueSize: 4,
+                divisionName: "Plata"
+            )
         )
-    )
+
+        ShareCardView(
+            model: ShareCardModel(
+                score: 87,
+                streakDays: 3,
+                leaguePosition: nil,
+                leagueName: nil,
+                leagueSize: 0
+            )
+        )
+    }
     .padding()
 }

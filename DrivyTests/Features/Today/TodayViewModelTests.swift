@@ -1,32 +1,52 @@
 import XCTest
 @testable import Drivy
 
-/// State of the Hoy tab (S6), exercised with a fake Supabase boundary.
+/// State of the Hoy tab (S1, S4, S6, S8), exercised with a fake Supabase boundary.
 @MainActor
 final class TodayViewModelTests: XCTestCase {
 
-    /// 2023-11-14T22:13:20Z, i.e. 2023-11-14 in UTC.
-    private static let now = Date(timeIntervalSince1970: 1_700_000_000)
     private static let userID = "user-1"
 
-    private var utc: Calendar {
+    /// 2026-03-10, a Tuesday, at 12:00 in Europe/Madrid.
+    private var madrid: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
         calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.timeZone = TimeZone(identifier: "Europe/Madrid") ?? .current
         return calendar
     }
 
-    private func makeSUT() -> (sut: TodayViewModel, fake: FakeTodayDataLoader) {
-        let fake = FakeTodayDataLoader()
-        let sut = TodayViewModel(dataLoader: fake, calendar: utc, now: { Self.now })
-        return (sut, fake)
+    private var now: Date {
+        madrid.date(from: DateComponents(year: 2026, month: 3, day: 10, hour: 12))
+            ?? Date(timeIntervalSince1970: 0)
+    }
+
+    private func dayKey(_ day: Int) -> String {
+        let date = madrid.date(from: DateComponents(year: 2026, month: 3, day: day, hour: 12))
+        return DriveDay.key(for: date ?? now, calendar: madrid)
+    }
+
+    private func makeSUT() -> (
+        sut: TodayViewModel,
+        today: FakeTodayDataLoader,
+        progress: FakeProgressDataLoader
+    ) {
+        let today = FakeTodayDataLoader()
+        let progress = FakeProgressDataLoader()
+        progress.now = { self.now }
+        let sut = TodayViewModel(
+            dataLoader: today,
+            progressLoader: progress,
+            calendar: madrid,
+            now: { self.now }
+        )
+        return (sut, today, progress)
     }
 
     private func drive(score: Int, distanceKm: Double) -> DriveHistoryRow {
         DriveHistoryRow(
             id: "row-\(score)",
-            startedAt: Self.now,
-            endedAt: Self.now.addingTimeInterval(600),
+            startedAt: now,
+            endedAt: now.addingTimeInterval(600),
             distanceKm: distanceKm,
             durationSeconds: 600,
             score: score,
@@ -38,13 +58,17 @@ final class TodayViewModelTests: XCTestCase {
         )
     }
 
+    private func dailyScore(day: String, score: Int) -> DailyScoreRecord {
+        DailyScoreRecord(day: day, score: score, distanceKm: 12.34, drivesCount: 1)
+    }
+
     func testLoadPublishesTheDayAndTheStreak() async {
-        let (sut, fake) = makeSUT()
-        fake.dailyScoresResult = .success([
-            DailyScoreRecord(day: "2023-11-14", score: 87, distanceKm: 12.34, drivesCount: 1),
-            DailyScoreRecord(day: "2023-11-13", score: 70, distanceKm: 8, drivesCount: 2)
+        let (sut, today, _) = makeSUT()
+        today.dailyScoresResult = .success([
+            dailyScore(day: dayKey(10), score: 87),
+            dailyScore(day: dayKey(9), score: 91)
         ])
-        fake.drivesResult = .success([drive(score: 87, distanceKm: 12.34)])
+        today.drivesResult = .success([drive(score: 87, distanceKm: 12.34)])
 
         await sut.load(userID: Self.userID)
 
@@ -58,17 +82,68 @@ final class TodayViewModelTests: XCTestCase {
     }
 
     func testLoadUsesTheSignedInUserID() async {
-        let (sut, fake) = makeSUT()
+        let (sut, today, _) = makeSUT()
 
         await sut.load(userID: Self.userID)
 
-        XCTAssertEqual(fake.dailyScoresCalls.last?.userID, Self.userID)
-        XCTAssertEqual(fake.drivesCalls.last?.userID, Self.userID)
+        XCTAssertEqual(today.dailyScoresCalls.last?.userID, Self.userID)
+        XCTAssertEqual(today.drivesCalls.last?.userID, Self.userID)
+    }
+
+    /// S1/S8: the plan in force decides the weekly freezes.
+    func testLoadUsesThePlanFreezes() async {
+        let (sut, _, _) = makeSUT()
+
+        await sut.load(userID: Self.userID, plan: .premium)
+
+        XCTAssertEqual(sut.snapshot.streak.freezesLeftThisWeek, FreemiumLimits.premiumWeeklyFreezes)
+    }
+
+    /// S6: the quests the day already satisfies are stored, once.
+    func testCompletedQuestsAreRecordedOnce() async {
+        let (sut, _, progress) = makeSUT()
+        progress.lessons[dayKey(10)] = (correct: 4, total: 5)
+
+        await sut.load(userID: Self.userID)
+
+        XCTAssertEqual(progress.quests[dayKey(10)] ?? [], Set([QuestCatalog.lesson.id]))
+
+        await sut.load(userID: Self.userID)
+
+        XCTAssertEqual(progress.quests[dayKey(10)] ?? [], Set([QuestCatalog.lesson.id]))
+    }
+
+    func testNothingIsRecordedWhenTheDayHasNoCompletedQuest() async {
+        let (sut, _, progress) = makeSUT()
+
+        await sut.load(userID: Self.userID)
+
+        XCTAssertTrue(progress.quests.isEmpty)
+    }
+
+    /// S8: the repair is written as the `yyyy-MM-dd` day key of the broken day.
+    func testRepairStreakRecordsTheBrokenDay() async {
+        let (sut, _, progress) = makeSUT()
+        let brokenDay = madrid.date(from: DateComponents(year: 2026, month: 3, day: 9, hour: 12)) ?? now
+
+        await sut.repairStreak(brokenDay: brokenDay)
+
+        XCTAssertEqual(progress.repairs.map(\.day), [dayKey(9)])
+        XCTAssertNil(sut.errorMessage)
+    }
+
+    func testRepairFailureShowsTheSpanishMessage() async {
+        let (sut, _, progress) = makeSUT()
+        progress.failure = FakeProgressDataLoader.FakeError.network
+
+        await sut.repairStreak(brokenDay: now)
+
+        XCTAssertEqual(sut.errorMessage, TodayViewModel.repairFailureMessage)
     }
 
     func testLoadFailureShowsTheSpanishMessage() async {
-        let (sut, fake) = makeSUT()
-        fake.dailyScoresResult = .failure(FakeTodayDataLoader.FakeError.network)
+        let (sut, today, _) = makeSUT()
+        today.dailyScoresResult = .failure(FakeTodayDataLoader.FakeError.network)
 
         await sut.load(userID: Self.userID)
 
@@ -79,13 +154,11 @@ final class TodayViewModelTests: XCTestCase {
 
     /// A failed refresh must not blank the day the user is already looking at.
     func testFailedRefreshKeepsThePreviousDay() async {
-        let (sut, fake) = makeSUT()
-        fake.dailyScoresResult = .success([
-            DailyScoreRecord(day: "2023-11-14", score: 87, distanceKm: 12.34, drivesCount: 1)
-        ])
+        let (sut, today, _) = makeSUT()
+        today.dailyScoresResult = .success([dailyScore(day: dayKey(10), score: 87)])
         await sut.load(userID: Self.userID)
 
-        fake.dailyScoresResult = .failure(FakeTodayDataLoader.FakeError.network)
+        today.dailyScoresResult = .failure(FakeTodayDataLoader.FakeError.network)
         await sut.load(userID: Self.userID)
 
         XCTAssertEqual(sut.snapshot.score, 87)
@@ -93,12 +166,12 @@ final class TodayViewModelTests: XCTestCase {
     }
 
     func testReloadClearsThePreviousError() async {
-        let (sut, fake) = makeSUT()
-        fake.dailyScoresResult = .failure(FakeTodayDataLoader.FakeError.network)
+        let (sut, today, _) = makeSUT()
+        today.dailyScoresResult = .failure(FakeTodayDataLoader.FakeError.network)
         await sut.load(userID: Self.userID)
         XCTAssertNotNil(sut.errorMessage)
 
-        fake.dailyScoresResult = .success([])
+        today.dailyScoresResult = .success([])
         await sut.load(userID: Self.userID)
 
         XCTAssertNil(sut.errorMessage)

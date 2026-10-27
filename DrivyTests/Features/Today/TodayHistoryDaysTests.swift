@@ -25,10 +25,14 @@ final class TodayHistoryDaysTests: XCTestCase {
     }
 
     private func load(_ fake: FakeTodayDataLoader) async throws -> TodaySnapshot {
-        try await TodaySnapshotLoader(dataLoader: fake, calendar: utc).load(
-            userID: "user-1",
-            now: Self.now
+        // The progress boundary is a stub: this file is about the `daily_scores`
+        // read, and no test may reach the network.
+        try await TodaySnapshotLoader(
+            dataLoader: fake,
+            progressLoader: StubProgressDataLoader(),
+            calendar: utc
         )
+        .load(userID: "user-1", now: Self.now)
     }
 
     func testDaysFollowTheStoredDailyScoresNewestFirst() async throws {
