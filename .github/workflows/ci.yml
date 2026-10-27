@@ -43,7 +43,7 @@
 #        header; nothing is ever revoked or deleted in the portal;
 #     4. `xcodebuild archive` (Release, generic/platform=iOS) with MANUAL
 #        signing: DEVELOPMENT_TEAM plus the per-target DRIVY_CODE_SIGN_STYLE,
-#        DRIVY_CODE_SIGN_IDENTITY (SHA-1 of the keychain identity) and
+#        DRIVY_CODE_SIGN_IDENTITY (SHA-1 of the profile's certificate) and
 #        DRIVY_PROFILE_SPECIFIER="<profile name>" (see project.yml);
 #     5. `xcodebuild -exportArchive` with an inline exportOptions.plist
 #        (method app-store, teamID, signingStyle manual, signingCertificate,
@@ -363,12 +363,12 @@ jobs:
           set -o pipefail
 
           # Both team certificates are named "Apple Distribution: Albert
-          # Castellvi (QP5A6D4Y4P)", so the identity is pinned by SHA-1
-          # fingerprint (the only one in the signing keychain), not by name.
-          identity="$(security find-identity -v -p codesigning "$SIGNING_KEYCHAIN_PATH" \
-            | awk '/Apple Distribution/ {print $2; exit}')"
+          # Castellvi (QP5A6D4Y4P)" and the shared .p12 holds both, so the
+          # identity is pinned by the SHA-1 of the certificate the profile was
+          # bound to (SIGNING_IDENTITY, from the provisioning step), not by name.
+          identity="${SIGNING_IDENTITY:-}"
           if [ -z "$identity" ]; then
-            echo "::error::No Apple Distribution identity in the signing keychain."
+            echo "::error::SIGNING_IDENTITY was not exported by the provisioning step."
             exit 1
           fi
           echo "Signing with identity $identity."

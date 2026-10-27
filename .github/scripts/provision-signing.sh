@@ -47,6 +47,7 @@
 # Outputs (written to $GITHUB_ENV):
 #   PROFILE_NAME            read by the archive/export steps (profile specifier)
 #   SIGNING_KEYCHAIN_PATH   read by the keychain cleanup step
+#   SIGNING_IDENTITY        SHA-1 of the certificate the profile is bound to
 #
 # A pre-existing distribution certificate is reused only when its private key
 # is already in a searched keychain (the workflow imports it with
@@ -67,6 +68,9 @@ KEY_PATH="${ASC_KEY_PATH:-$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8}"
 WORK="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/drivy-signing"
 KEYCHAIN="$WORK/Drivy-signing.keychain-db"
 CERT_RESOURCE_ID=""
+# SHA-1 of the certificate the profile is bound to; the keychain can hold more
+# than one identity with the same name (the shared .p12 carries two).
+SIGNING_IDENTITY=""
 PROFILE_RESOURCE_ID=""
 # Defaults so the script can also be inspected/run outside a workflow step.
 GITHUB_ENV="${GITHUB_ENV:-/dev/null}"
@@ -424,6 +428,7 @@ if [ -n "$existing_certs" ] && [ -n "$signing_identities" ]; then
     sha1="$(printf '%s' "$content" | openssl base64 -d -A | openssl sha1 | awk '{print toupper($NF)}')"
     if printf '%s\n' "$signing_identities" | grep -qx "$sha1"; then
       CERT_RESOURCE_ID="$id"
+      SIGNING_IDENTITY="$sha1"
       cert_expiry="$expiry"
       KEYCHAIN="${IMPORTED_KEYCHAIN_PATH:-$KEYCHAIN}"
       info "Reusing Apple Distribution certificate $CERT_RESOURCE_ID (expires ${cert_expiry:-unknown}); its private key is already in the keychain."
@@ -513,6 +518,8 @@ PY
   b64decode "$WORK/certificate.b64" "$WORK/certificate.cer"
   openssl x509 -inform DER -in "$WORK/certificate.cer" -out "$WORK/certificate.pem" 2>"$WORK/openssl-x509-error" \
     || die "The downloaded certificate is not valid DER X.509." "$(cat "$WORK/openssl-x509-error")"
+  SIGNING_IDENTITY="$(openssl x509 -inform DER -in "$WORK/certificate.cer" -noout -fingerprint -sha1 \
+    | cut -d= -f2 | tr -d ':')"
   info "Created Apple Distribution certificate $CERT_RESOURCE_ID (expires ${cert_expiry:-unknown})."
 
   # .p12 with a random export password; the password goes through a 0600 file, not
@@ -691,6 +698,7 @@ info "Installed App Store profile '$PROFILE_NAME' (UUID $profile_uuid, expires $
 {
   echo "PROFILE_NAME=$PROFILE_NAME"
   echo "SIGNING_KEYCHAIN_PATH=$KEYCHAIN"
+  echo "SIGNING_IDENTITY=$SIGNING_IDENTITY"
 } >>"$GITHUB_ENV"
 
 {
