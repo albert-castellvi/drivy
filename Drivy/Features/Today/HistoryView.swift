@@ -88,7 +88,7 @@ struct HistoryView: View {
                 Text(PaywallCopy.title)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .glassProminentOrBorderedProminent()
         }
         .padding(.vertical, 4)
     }

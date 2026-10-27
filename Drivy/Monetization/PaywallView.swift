@@ -32,7 +32,7 @@ struct PaywallView: View {
                 .padding(24)
             }
             // S9/S12: the paywall never blocks the app, it is always dismissible.
-            .safeAreaInset(edge: .bottom) { actions }
+            .paywallActionBar { actions }
             .navigationTitle(PaywallCopy.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -101,7 +101,7 @@ struct PaywallView: View {
                     Text(PaywallCopy.purchaseButtonTitle)
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .glassProminentOrBorderedProminent()
                 .disabled(viewModel.isBusy)
             }
 
@@ -112,7 +112,6 @@ struct PaywallView: View {
             .disabled(viewModel.isBusy)
         }
         .padding()
-        .background(.bar)
     }
 
     // MARK: - Building blocks
@@ -131,6 +130,26 @@ struct PaywallView: View {
                 .font(.footnote)
                 .foregroundStyle(color)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+// MARK: - Bottom action bar
+
+private extension View {
+
+    /// Action bar of the paywall (S9/S12).
+    ///
+    /// iOS 26 renders it as a real system bar: `safeAreaBar` reserves the space and
+    /// draws the scroll-edge blur and the glass treatment behind the content, so the
+    /// bar brings no material of its own. Earlier releases keep today's
+    /// `safeAreaInset` plus its `.bar` background.
+    @ViewBuilder
+    func paywallActionBar<Bar: View>(@ViewBuilder bar: () -> Bar) -> some View {
+        if #available(iOS 26, *) {
+            self.safeAreaBar(edge: .bottom) { bar() }
+        } else {
+            self.safeAreaInset(edge: .bottom) { bar().background(.bar) }
         }
     }
 }
