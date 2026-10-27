@@ -32,7 +32,8 @@
 #     1. decode the .p8 to $HOME/private_keys/AuthKey_<KEYID>.p8 (chmod 600,
 #        path masked, never echoed) — the location `altool` and the
 #        provisioning script look in;
-#     2. validate the key with `xcrun altool --list-providers`;
+#     2. (no separate key check: the provisioning script's first ASC API
+#        call fails loudly on a bad Key ID / Issuer ID / key);
 #     3. provision signing material via the ASC API: mint an ES256 JWT signed
 #        with the .p8, ensure the App ID `com.acrstudio.drivy` exists, enable
 #        its Sign in with Apple capability, create an Apple Distribution
@@ -305,18 +306,6 @@ jobs:
             exit 1
           fi
           echo "App Store Connect API key installed at the masked path."
-      # Validates the key against Apple's auth service before any archive work:
-      # distinguishes a bad Key ID / Issuer ID / key from an xcodebuild-specific
-      # provisioning problem. Failures here mean the secret values are wrong.
-      - name: Validate ASC API key (list providers)
-        if: steps.signing.outputs.signed == 'true'
-        run: |
-          set -o pipefail
-          if ! xcrun altool --list-providers \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1; then
-            echo "::error::ASC API key authentication failed. Check that Key ID, Issuer ID and the .p8 belong to the same API key of team $APPLE_TEAM_ID."
-            exit 1
-          fi
 
       # Imports the team's existing Apple Distribution identity (H69DS6A3KZ,
       # the same .p12 ProofMate signs with) into a temporary keychain. The
