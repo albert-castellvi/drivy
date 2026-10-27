@@ -78,6 +78,9 @@ GitHub Actions (runner macOS).
   `feat(ci): macos build and test pipeline`.
 - **T7** ✅ DONE — Verificación final: suite completa en CI, veredicto
   por S#. Evidencia en L14.
+- **T8** (S11, post-MVP) Pipeline firmado a TestFlight en CI: archive +
+  export + upload con ASC API key (cloud signing). Commit:
+  `feat(ci): signed testflight pipeline`.
 
 ## Log
 
@@ -185,3 +188,13 @@ GitHub Actions (runner macOS).
   post-MVP: prueba en dispositivo real, StoreKit sandbox, capability en
   portal Apple, TestFlight. MVP cerrado en código; merge de la cadena de
   PRs: decisión del usuario.
+- **L15** T8 (post-MVP): Secrets ASC en GitHub (KEY_ID/ISSUER_ID/.p8
+  base64). Worker reescribió build-release: decode de la .p8 a
+  ~/private_keys (enmascarada), archive firmado con
+  DEVELOPMENT_TEAM=128809494 + -allowProvisioningUpdates (certificado
+  cloud, sin p12), export con method app-store, upload con altool;
+  guard signed=true|false con fallback unsigned si faltan secrets.
+  Validación structural completa (guard probado positivo/negativo,
+  exportOptions parseado, no secret en logs). Firma real pendiente del
+  primer push a main; riesgo conocido: la capability Sign in with Apple
+  debe estar en el App ID del portal.

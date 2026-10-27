@@ -8,36 +8,47 @@
 #   test         — runs on every PR (and on main / manual dispatch):
 #                  `xcodegen generate` + `xcodebuild test` on an iPhone
 #                  simulator. Simulator builds need no Apple Developer team.
-#   build-release— runs only on `main` (and manual dispatch): unsigned
-#                  Release build for a generic iOS device, i.e. the exact
-#                  compile the TestFlight archive will use once signing is
-#                  available.
+#   build-release— runs only on `main` (and manual dispatch): generates the
+#                  project, archives Release for `generic/platform=iOS`, exports
+#                  a signed .ipa and uploads it to TestFlight. If the App Store
+#                  Connect secrets are absent (forks, early state) the same job
+#                  falls back to an unsigned Release build.
 #
-# SIGNING / TESTFLIGHT TODO (open, needs a human with App Store Connect
-# access — no repository secrets exist yet):
-#   `build-main` cannot produce a signed archive because `DEVELOPMENT_TEAM` is
-#   intentionally unset in `project.yml`. To turn this into a real TestFlight
-#   pipeline the repo needs these secrets:
-#     APPLE_TEAM_ID                  Apple Developer team id (10 chars)
-#     APPLE_CERTIFICATE_P12_BASE64   "Apple Distribution" cert, base64 p12
-#     APPLE_CERTIFICATE_PASSWORD     password of that p12
-#     APPLE_PROVISIONING_PROFILE_BASE64  App Store profile for
-#                                        com.acrstudio.drivy (S14 / L5)
-#     APP_STORE_CONNECT_API_KEY_ID   App Store Connect API key (upload)
-#     APP_STORE_CONNECT_API_ISSUER_ID
-#     APP_STORE_CONNECT_API_KEY_BASE64
-#   With those in place the step that replaces the unsigned build is:
-#     xcodebuild archive -project Drivy.xcodeproj -scheme Drivy \
-#       -configuration Release -destination 'generic/platform=iOS' \
-#       -archivePath build/Drivy.xcarchive \
-#       DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-#       CODE_SIGN_STYLE=Automatic OTHER_CODE_SIGN_FLAGS="--keychain build.keychain"
-#     xcodebuild -exportArchive -archivePath build/Drivy.xcarchive \
-#       -exportOptionsPlist ci/ExportOptions.plist -exportPath build/export
-#     xcrun altool --upload-app -f build/export/Drivy.ipa --apiKey "$KEY_ID" \
-#       --apiIssuer "$ISSUER_ID"
-#   Note the same Sign in with Apple capability (S10) must also be enabled on
-#   the App ID in the Apple Developer portal, not only in project.yml (L7 risk).
+# SIGNED PIPELINE (implemented, S11):
+#   `DEVELOPMENT_TEAM` stays unset in `project.yml` on purpose (simulator builds
+#   need no team); the team is injected by the workflow instead. Repository
+#   secrets consumed here (Settings → Secrets and variables → Actions):
+#     APP_STORE_CONNECT_API_KEY_ID       key id of the ASC API key (10 chars)
+#     APP_STORE_CONNECT_API_ISSUER_ID    issuer id of that key (UUID)
+#     APP_STORE_CONNECT_API_KEY_BASE64   base64 of AuthKey_<KEYID>.p8
+#   The Apple Developer team id (128809494) is public and hardcoded in the job
+#   env. Xcode 16.4 on macos-15 creates and fetches the Apple Distribution
+#   certificate and the App Store provisioning profile from the cloud, so no
+#   .p12 or .mobileprovision secret is needed: the API key authenticates
+#   `-allowProvisioningUpdates`.
+#
+#   Steps, in order:
+#     1. decode the .p8 to $HOME/private_keys/AuthKey_<KEYID>.p8 (chmod 600,
+#        path masked, never echoed) — the location both `xcodebuild
+#        -authenticationKeyPath` and `altool` look in;
+#     2. `xcodebuild archive` (Release, generic/platform=iOS) with
+#        DEVELOPMENT_TEAM, CODE_SIGN_STYLE=Automatic, -allowProvisioningUpdates
+#        and the three -authenticationKey* flags;
+#     3. `xcodebuild -exportArchive` with an inline exportOptions.plist
+#        (method app-store, teamID, signingStyle automatic, uploadSymbols) and
+#        the same authentication flags;
+#     4. `xcrun altool --upload-app -t ios` against TestFlight. A failing upload
+#        fails the job and prints the full altool log.
+#
+#   Fallback guard: the three secrets reach the job through `env` because the
+#   `secrets` context cannot be used in an `if:` expression. A `Resolve signing
+#   mode` step tests them for emptiness and publishes `signed=true|false`; the
+#   signed steps run only on `true`, the unsigned build only otherwise, and the
+#   run summary says which path ran and why.
+#
+#   Known portal dependency: the Sign in with Apple capability (S10) must also
+#   be enabled on the App ID in the Apple Developer portal, not only in
+#   project.yml (L7 risk).
 #
 # Keep this file in sync with the CI section of `.github/PULL_REQUEST_TEMPLATE.md`.
 
@@ -147,11 +158,21 @@ jobs:
           if-no-files-found: ignore
 
   build-release:
-    name: Unsigned Release build (main only)
+    name: Signed TestFlight archive + upload (main only)
     # S11: the release build belongs to `main` only, never to a PR.
     if: github.event_name != 'pull_request'
     runs-on: macos-15
-    timeout-minutes: 45
+    # Archive + export + upload; App Store Connect processing itself is
+    # asynchronous and is not waited for by this job.
+    timeout-minutes: 60
+    env:
+      # Public Apple Developer team id (S14 / L5) — not a secret.
+      APPLE_TEAM_ID: "128809494"
+      # Repository secrets, surfaced as env vars only so the fallback guard can
+      # test them with a shell `-n`: `secrets` is not available to `if:`.
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      ASC_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -185,11 +206,186 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
-      # S11 asks for a Release archive signed with Apple Developer secrets. No
-      # secrets exist yet, so this builds the same Release configuration for a
-      # generic iOS device with signing disabled. That catches device-only
-      # compile/optimizer failures without pretending to be a TestFlight build.
-      - name: Build Release for generic iOS device (unsigned)
+      # Fallback guard (S11): forks and early states have no App Store Connect
+      # secrets. Only emptiness is tested here — no value is ever printed — and
+      # the result decides which build path runs below.
+      - name: Resolve signing mode
+        id: signing
+        run: |
+          set -o pipefail
+          missing=""
+          [ -n "$ASC_KEY_ID" ] || missing="$missing APP_STORE_CONNECT_API_KEY_ID"
+          [ -n "$ASC_ISSUER_ID" ] || missing="$missing APP_STORE_CONNECT_API_ISSUER_ID"
+          [ -n "$ASC_KEY_BASE64" ] || missing="$missing APP_STORE_CONNECT_API_KEY_BASE64"
+          if [ -z "$missing" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "App Store Connect secrets present: signed archive + TestFlight upload."
+            exit 0
+          fi
+          echo "signed=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Apple secrets missing:$missing — falling back to an unsigned Release build."
+          {
+            echo "### Signed TestFlight path skipped"
+            echo ""
+            echo "Missing repository secrets:$missing"
+            echo ""
+            echo "This run used the unsigned Release build fallback instead."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Installs the .p8 at the path both xcodebuild (-authenticationKeyPath) and
+      # altool (~/private_keys/) expect. The path and file name are masked, and
+      # the base64 blob is masked by GitHub as a secret; neither is echoed.
+      - name: Install App Store Connect API key
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          set -o pipefail
+          key_dir="$HOME/private_keys"
+          key_name="AuthKey_${ASC_KEY_ID}.p8"
+          key_path="$key_dir/$key_name"
+          echo "::add-mask::$key_path"
+          echo "::add-mask::$key_name"
+          mkdir -p "$key_dir"
+          chmod 700 "$key_dir"
+          # -D is the macOS/BSD spelling; --decode is kept as a portability net.
+          if ! printf '%s' "$ASC_KEY_BASE64" | base64 -D > "$key_path" 2>/dev/null; then
+            printf '%s' "$ASC_KEY_BASE64" | base64 --decode > "$key_path"
+          fi
+          chmod 600 "$key_path"
+          if [ ! -s "$key_path" ]; then
+            echo "::error::Decoded API key is empty — check APP_STORE_CONNECT_API_KEY_BASE64."
+            exit 1
+          fi
+          if ! grep -q 'BEGIN PRIVATE KEY' "$key_path"; then
+            echo "::error::Decoded APP_STORE_CONNECT_API_KEY_BASE64 is not a .p8 PEM file."
+            exit 1
+          fi
+          echo "App Store Connect API key installed at the masked path."
+
+      # Xcode 16.4 on macos-15 provisions the distribution certificate and the
+      # App Store profile from the cloud because of -allowProvisioningUpdates
+      # plus the API-key authentication flags.
+      - name: Archive and export signed IPA
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          set -o pipefail
+          key_path="$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+          xcodebuild archive \
+            -project "$XCODEPROJ" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Drivy.xcarchive \
+            -derivedDataPath build/DerivedData \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$key_path" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+          # exportOptions are inline on purpose: no signing material is ever
+          # committed. `app-store` is the legacy spelling of the App Store
+          # Connect method and is still accepted by Xcode 16.
+          mkdir -p build
+          cat > build/exportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath build/Drivy.xcarchive \
+            -exportOptionsPlist build/exportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$key_path" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+          # `|| true`: the runner's shell is `bash -e`, so an empty match must
+          # not abort before the readable ::error:: below.
+          ipa="$(find build/export -maxdepth 1 -name '*.ipa' -print -quit 2>/dev/null || true)"
+          if [ -z "$ipa" ]; then
+            echo "::error::Export produced no .ipa under build/export"
+            find build/export -maxdepth 2 || true
+            exit 1
+          fi
+          echo "Exported: $ipa"
+          du -sh "$ipa"
+
+      # altool is still Apple's supported CLI upload path for iOS binaries with
+      # an App Store Connect API key. Any failure here — including Apple-side
+      # processing rejections — fails the job and dumps the full log.
+      - name: Upload to TestFlight
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          set -o pipefail
+          ipa="$(find build/export -maxdepth 1 -name '*.ipa' -print -quit 2>/dev/null || true)"
+          if [ -z "$ipa" ]; then
+            echo "::error::No .ipa to upload"
+            exit 1
+          fi
+          log="$RUNNER_TEMP/altool-upload.log"
+          echo "Uploading $(basename "$ipa") to TestFlight (log: $log)"
+          if xcrun altool --upload-app \
+              -f "$ipa" \
+              -t ios \
+              --apiKey "$ASC_KEY_ID" \
+              --apiIssuer "$ASC_ISSUER_ID" > "$log" 2>&1; then
+            tail -n 20 "$log"
+            # Non-fatal cross-check: altool's exit code is the gate, but a
+            # success with no known success marker is worth a visible warning.
+            if ! grep -Eq 'No errors uploading|UPLOAD SUCCEEDED' "$log"; then
+              echo "::warning::altool exited 0 but printed no known success marker — check the log above."
+            fi
+          else
+            status=$?
+            echo "::error::TestFlight upload failed (altool exit $status). Full log follows."
+            cat "$log"
+            exit "$status"
+          fi
+          {
+            echo "### Uploaded to TestFlight"
+            echo ""
+            echo "Binary: \`$(basename "$ipa")\`"
+            echo ""
+            echo "Apple's processing is asynchronous: the build appears in App"
+            echo "Store Connect → TestFlight once processing finishes."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report signed artifacts
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          set -o pipefail
+          ARCHIVE=build/Drivy.xcarchive
+          IPA="$(find build/export -maxdepth 1 -name '*.ipa' -print -quit 2>/dev/null || true)"
+          if [ ! -d "$ARCHIVE" ] || [ -z "$IPA" ]; then
+            echo "::error::Missing signed artifacts (archive: $ARCHIVE, ipa: ${IPA:-none})"
+            find build -maxdepth 2 || true
+            exit 1
+          fi
+          echo "Archive: $ARCHIVE"
+          echo "IPA: $IPA"
+          du -sh "$ARCHIVE" "$IPA"
+
+      # Fallback path (S11): without signing secrets the job still builds the
+      # same Release configuration for a generic iOS device with signing
+      # disabled. That catches device-only compile/optimizer failures without
+      # pretending to be a TestFlight build.
+      - name: Build Release for generic iOS device (unsigned fallback)
+        if: steps.signing.outputs.signed != 'true'
         run: |
           set -o pipefail
           xcodebuild build \
@@ -203,11 +399,12 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_ENTITLEMENTS=""
 
-      - name: Report build products and signing TODO
+      - name: Report unsigned fallback artifacts
+        if: steps.signing.outputs.signed != 'true'
         run: |
           set -o pipefail
           PRODUCTS=build/DerivedData/Build/Products/Release-iphoneos
-          APP="$(find "$PRODUCTS" -maxdepth 1 -name 'Drivy.app' -print -quit)"
+          APP="$(find "$PRODUCTS" -maxdepth 1 -name 'Drivy.app' -print -quit 2>/dev/null || true)"
           if [ -z "$APP" ]; then
             echo "::error::Release build produced no Drivy.app under $PRODUCTS"
             find "$PRODUCTS" -maxdepth 2 || true
@@ -216,9 +413,12 @@ jobs:
           echo "Built: $APP"
           du -sh "$APP"
           {
-            echo "### Unsigned Release build OK"
+            echo "### Unsigned Release build OK (TestFlight path skipped)"
             echo ""
-            echo "Signed TestFlight archive is **still pending**: it needs Apple"
-            echo "Developer secrets that do not exist in this repository yet."
-            echo "See the TODO block at the top of \`.github/workflows/ci.yml\`."
+            echo "The signed archive + upload did not run because at least one of"
+            echo "\`APP_STORE_CONNECT_API_KEY_ID\`,"
+            echo "\`APP_STORE_CONNECT_API_ISSUER_ID\` or"
+            echo "\`APP_STORE_CONNECT_API_KEY_BASE64\` is empty in this repository."
+            echo "Configure them to enable the TestFlight upload; see the header"
+            echo "of \`.github/workflows/ci.yml\`."
           } >> "$GITHUB_STEP_SUMMARY"
