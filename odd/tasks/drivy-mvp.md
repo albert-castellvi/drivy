@@ -63,10 +63,11 @@ GitHub Actions (runner macOS).
 - **T2** (S3, S11) ✅ DONE — Proyecto Xcode + shell SwiftUI (tab root: Hoy /
   Ligas / Ajustes), Sign in with Apple, cliente Supabase. Route: delegado.
   Commit: `feat(app): xcode project and auth shell`.
-- **T3** (S4, S5, S10, S13) Tracking de trayecto (CLLocation +
+- **T3** (S4, S5, S10, S13) ✅ DONE — Tracking de trayecto (CLLocation +
   CMMotionManager), detección de conducción conectada (AVAudioSession route
   changes) y motor de scoring v1 como módulo testeable puro (inyección de
-  muestras). Route: delegado. Commit: `feat(app): drive tracking and scoring engine`.
+  muestras). Route: delegado. Commit: `feat(app): drive tracking and scoring
+  engine`.
 - **T4** (S6, S7, S8) Pantallas core: Hoy (score, racha), detalle de trayecto
   con mapa, Ligas + invite, share card. Route: delegado. Commit:
   `feat(app): core screens and share card`.
@@ -116,3 +117,20 @@ GitHub Actions (runner macOS).
   `xcodegen generate` nunca ejecutado localmente. Verificación structural
   (YAML/plist parse, balance lint) OK. Veredictos: S3 ✓, S11 parcial (la
   parte de proyecto; el workflow es T6), S14 ✓.
+- **L8** Corte de slice PR (estrategia chained PR, rama > 400 líneas):
+  commit `3fcc8f8` = slice 1 «backend schema v1 + app shell/auth».
+  Slices siguientes: slice 2 = T3 (tracking/scoring), slice 3 = T4+T5
+  (pantallas core + paywall), slice 4 = T6 (CI). PRs apilados sobre
+  `main` al cerrar la feature.
+- **L9** T3 ejecutado por worker. Scoring puro (solo Foundation) con
+  umbrales estrictos + histéresis de release; fórmula: penalty = (frenadas×12
+  + acels×8 + excesos×10 + teléfono×25 si no conectado) / max(km, 0.1);
+  score = clamp(100 − penalty + 5 si conectado); diario S6 = media ponderada
+  por km recalculada desde el servidor. 75 tests nuevos (re-derivados en
+  Python como doble comprobación). Riesgos documentados: supabase-swift sin
+  compilar (v2.55.5 verificada a ojo), eje longitudinal asume montaje
+  vertical del iPhone, sin datos de límite de velocidad aún (eventos de
+  exceso = 0 hasta MapKit en T4), señal de uso del móvil = proxy
+  didBecomeActive, subidas fallidas sin cola de reintento. Veredictos:
+  S4 ✓, S5 ✓, S6 ✓, S10 ✓, S12 ✓, S13 ✓ (todos pendientes de compilación
+  en CI).

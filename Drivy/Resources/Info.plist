@@ -24,8 +24,18 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Drivy registra tus trayectos automáticamente, también con la app cerrada. Elige «Siempre» para no perder ningún trayecto. Las muestras de GPS se quedan en tu iPhone.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Drivy usa tu ubicación mientras conduces para registrar el trayecto y calcular tu Driver Score.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Drivy usa el sensor de movimiento para detectar frenadas y aceleraciones bruscas y puntuar tu conducción.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>
