@@ -42,9 +42,9 @@
 #        endpoints and the DER→raw JWT signature conversion live in the script
 #        header; nothing is ever revoked or deleted in the portal;
 #     4. `xcodebuild archive` (Release, generic/platform=iOS) with MANUAL
-#        signing: DEVELOPMENT_TEAM, CODE_SIGN_STYLE=Manual,
-#        CODE_SIGN_IDENTITY="Apple Distribution" and
-#        PROVISIONING_PROFILE_SPECIFIER="<profile name>";
+#        signing: DEVELOPMENT_TEAM plus the per-target DRIVY_CODE_SIGN_STYLE,
+#        DRIVY_CODE_SIGN_IDENTITY (SHA-1 of the keychain identity) and
+#        DRIVY_PROFILE_SPECIFIER="<profile name>" (see project.yml);
 #     5. `xcodebuild -exportArchive` with an inline exportOptions.plist
 #        (method app-store, teamID, signingStyle manual, signingCertificate,
 #        provisioningProfiles, uploadSymbols);
@@ -362,6 +362,17 @@ jobs:
         run: |
           set -o pipefail
 
+          # Both team certificates are named "Apple Distribution: Albert
+          # Castellvi (QP5A6D4Y4P)", so the identity is pinned by SHA-1
+          # fingerprint (the only one in the signing keychain), not by name.
+          identity="$(security find-identity -v -p codesigning "$SIGNING_KEYCHAIN_PATH" \
+            | awk '/Apple Distribution/ {print $2; exit}')"
+          if [ -z "$identity" ]; then
+            echo "::error::No Apple Distribution identity in the signing keychain."
+            exit 1
+          fi
+          echo "Signing with identity $identity."
+
           xcodebuild archive \
             -project "$XCODEPROJ" \
             -scheme "$SCHEME" \
@@ -370,9 +381,9 @@ jobs:
             -archivePath build/Drivy.xcarchive \
             -derivedDataPath build/DerivedData \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
+            DRIVY_CODE_SIGN_STYLE=Manual \
+            DRIVY_CODE_SIGN_IDENTITY="$identity" \
+            DRIVY_PROFILE_SPECIFIER="$PROFILE_NAME"
 
           # exportOptions are inline on purpose: no signing material is ever
           # committed. `app-store` is the legacy spelling of the App Store
@@ -392,7 +403,7 @@ jobs:
             <key>signingStyle</key>
             <string>manual</string>
             <key>signingCertificate</key>
-            <string>Apple Distribution</string>
+            <string>${identity}</string>
             <key>provisioningProfiles</key>
             <dict>
               <key>${BUNDLE_ID}</key>

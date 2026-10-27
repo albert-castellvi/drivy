@@ -63,6 +63,16 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.acrstudio.drivy
         INFOPLIST_FILE: Drivy/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Drivy/Resources/Drivy.entitlements
+        # Signing is resolved per target on purpose: SPM package targets reject
+        # a manually specified provisioning profile, so the signed CI archive
+        # overrides only these DRIVY_* variables on the xcodebuild command line.
+        # Locally they keep the automatic-signing defaults.
+        DRIVY_CODE_SIGN_STYLE: Automatic
+        DRIVY_CODE_SIGN_IDENTITY: Apple Development
+        DRIVY_PROFILE_SPECIFIER: ""
+        CODE_SIGN_STYLE: $(DRIVY_CODE_SIGN_STYLE)
+        CODE_SIGN_IDENTITY: $(DRIVY_CODE_SIGN_IDENTITY)
+        PROVISIONING_PROFILE_SPECIFIER: $(DRIVY_PROFILE_SPECIFIER)
     # DEVELOPMENT_TEAM is intentionally unset: simulator builds and tests need
     # no team, and CI injects the Apple Developer team for signed releases.
 
