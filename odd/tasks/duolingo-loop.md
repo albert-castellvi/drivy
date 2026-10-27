@@ -116,17 +116,18 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
   mismo `infinite recursion` que producción); GREEN: 6/6 con 0002.
 - **T1b** (S1-S8) ✅ DONE — Capa de datos compartida `ProgressDataLoading` +
   fake. Commit `507e25c`. Route: inline (estado compartido de todos los writers).
-- **T2** (S1, S4, S8) ⏳ — Racha v2 + hielos + reparación Premium + XP en Hoy.
+- **T2** 🔶 escrito, pendiente de CI (S1, S4, S8) — Racha v2 + hielos + reparación Premium + XP en Hoy.
   Route: delegado, writer A (con T6 y la share card de T9).
-- **T3** (S2) ⏳ — Test de teoría + banco de preguntas. Route: delegado,
-  writer B (con T5).
-- **T4** (S2) ⏳ — Resumen post-trayecto con eventos en el mapa. Route:
+- **T3** (S2) 🔶 escrito, pendiente de CI — Test de teoría + banco de
+  preguntas. Route: delegado, writer B1 (B falló por límite de salida, L11).
+- **T4** 🔶 escrito, pendiente de CI (S2) — Resumen post-trayecto con eventos en el mapa. Route:
   delegado, writer C.
-- **T5** (S3) ⏳ — Pestaña Camino y unidades. Route: delegado, writer B.
-- **T6** (S6) ⏳ — Misiones diarias. Route: delegado, writer A.
-- **T7** (S5) ⏳ — Ligas públicas en iOS + ranking privado por XP. Route:
+- **T5** (S3) 🔶 escrito, pendiente de CI — Pestaña Camino y unidades.
+  Route: delegado, writer B2.
+- **T6** 🔶 escrito, pendiente de CI (S6) — Misiones diarias. Route: delegado, writer A.
+- **T7** 🔶 escrito, pendiente de CI (S5) — Ligas públicas en iOS + ranking privado por XP. Route:
   delegado, writer D.
-- **T8** (S7) ⏳ — Notificaciones locales. Route: inline (parent, al integrar:
+- **T8** 🔶 escrito, pendiente de CI (S7) — Notificaciones locales. Route: inline (parent, al integrar:
   toca DriveRecorder, la app y los puntos de enganche de B y C).
 - **T9** (S9) ⏳ — Share card (writer A) y documentación (parent).
 - **T10** — Verificador independiente (items 1, 2 y 3 de alto riesgo).
@@ -185,3 +186,14 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
   S5. Pendientes asumidos: A1 (aplicar la migración antes de publicar la
   build), A5 (tope de 30 probado solo en una sesión), A7 (el ledger se calcula
   en cada lectura).
+- **L11** (2026-10-27) Writers A, C y D terminaron; B agotó su límite de
+  salida sin escribir nada y se relanzó partido en B1 (lecciones, banco escrito
+  en tandas de 10) y B2 (Camino). Commits por unidad: `c7ebd60` (T8),
+  `3c5f1b6` (T4), `40f584b` (T7), `c7029bf` (T2, T6 y share card de T9).
+  Revisión del banco por el parent: corregidas `roundabout_exit_signal` (se
+  señaliza después de pasar la salida anterior, no antes) y
+  `lights_day_interurban` (la luz de cruce de día no es obligatoria para
+  turismos; sustituida por `lights_in_tunnel`). Pendiente de revisión humana:
+  todo el banco, en especial `alcohol_rate_*`, por la reforma en trámite de
+  las tasas de alcohol. Entrega: un único PR con un commit por unidad (el
+  usuario pidió merge al terminar, L7).
