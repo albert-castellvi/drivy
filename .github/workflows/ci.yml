@@ -193,6 +193,9 @@ jobs:
     # asynchronous and is not waited for by this job.
     timeout-minutes: 60
     env:
+      # App Store Connect rejects uploads built with an SDK older than iOS 26,
+      # so this job builds with Xcode 26 (same path MiJornada uses on macos-15).
+      DEVELOPER_DIR: /Applications/Xcode_26.0.app/Contents/Developer
       # Public Apple Developer team id (S14 / L5) — not a secret.
       APPLE_TEAM_ID: "QP5A6D4Y4P"
       # Identity of the app in the developer portal; consumed by the
@@ -381,6 +384,7 @@ jobs:
             -archivePath build/Drivy.xcarchive \
             -derivedDataPath build/DerivedData \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             DRIVY_CODE_SIGN_STYLE=Manual \
             DRIVY_CODE_SIGN_IDENTITY="$identity" \
             DRIVY_PROFILE_SPECIFIER="$PROFILE_NAME"

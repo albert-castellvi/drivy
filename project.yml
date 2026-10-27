@@ -63,6 +63,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.acrstudio.drivy
         INFOPLIST_FILE: Drivy/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Drivy/Resources/Drivy.entitlements
+        # iPhone only. Repeated at target level because XcodeGen's iOS preset
+        # sets "1,2" here, which overrides the project-level value.
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Signing is resolved per target on purpose: SPM package targets reject
         # a manually specified provisioning profile, so the signed CI archive
         # overrides only these DRIVY_* variables on the xcodebuild command line.
