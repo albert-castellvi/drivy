@@ -151,6 +151,16 @@ GitHub Actions (runner macOS).
   invite con colisión → error genérico (unique constraint). Racha S6
   revisada a mano contra el spec literal: correcta. Veredictos: S6 ✓,
   S7 ✓, S8 ✓ (pendientes de compilación en CI).
+- **L13** Integración S9 + cierre del hueco L11 (worker, superficies
+  ampliadas tras escalado): FreemiumSessionCoordinator a nivel app (anchor
+  = auth.users.created_at vía UserSummary.createdAt, re-anclaje al primer
+  trayecto una vez por cuenta), paywall once-ever tras el primer trayecto
+  (persistido, nunca bloquea registrar), pantalla Histórico en Hoy con
+  fila de bloqueo + upsell (canViewHistory), cap de 1 liga en free que
+  bloquea create/join antes de llamar al RPC, y ruta local expuesta por
+  DriveRecorder para la polyline del detalle. 53 tests nuevos. Revisado
+  a mano: sin coordenadas en el payload de subida, ciclo de vida por
+  cuenta correcto. Veredicto: S9 wired ✓, L11 cerrado.
 - **L12** T6 ejecutado por worker: `.github/workflows/ci.yml` (2 jobs,
   macos-15): test = xcodegen + assert de scheme/targets + xcodebuild test en
   iPhone 16; build-release = build Release unsigned genérico solo en

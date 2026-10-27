@@ -6,6 +6,17 @@ struct UserSummary: Equatable {
     let id: String
     let email: String?
 
+    /// `auth.users.created_at` of the account, the anchor of the 7-day full
+    /// history window of the free plan (S9). `nil` when the session does not
+    /// carry it, in which case the freemium gate falls back to "now".
+    let createdAt: Date?
+
+    init(id: String, email: String?, createdAt: Date? = nil) {
+        self.id = id
+        self.email = email
+        self.createdAt = createdAt
+    }
+
     /// Short identifier shown in Ajustes (a full UUID is unusable in a row).
     var shortIdentifier: String {
         String(id.prefix(8))

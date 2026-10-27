@@ -1,4 +1,5 @@
 import Combine
+import CoreLocation
 import Foundation
 
 /// Records one drive end to end.
@@ -10,6 +11,10 @@ import Foundation
 ///
 /// S4: the manual start/stop button is the guarantee; automatic detection is best
 /// effort and silent, so nothing here ever blocks a manual drive.
+///
+/// L11: it also keeps the coordinates of the drive (`routeCoordinates`), which is
+/// the only thing that can feed the map of the drive detail: the samples are never
+/// uploaded (S10), so the route only exists on the device that recorded it.
 @MainActor
 final class DriveRecorder: ObservableObject {
 
@@ -24,6 +29,15 @@ final class DriveRecorder: ObservableObject {
     @Published private(set) var startedAt: Date?
 
     @Published private(set) var distanceKm: Double = 0
+
+    /// Coordinates of the drive in fix order (L11).
+    ///
+    /// They are kept in memory only while the app that recorded the drive is
+    /// alive: nothing here is uploaded (S10), so `LocalRouteStore` is the only
+    /// consumer and the drive detail can draw the route of this session. After
+    /// `stop()` they stay available next to `lastCompletedDrive`, so the screen
+    /// that reacts to the finished drive still sees its route.
+    @Published private(set) var routeCoordinates: [CLLocationCoordinate2D] = []
 
     /// Live score so far; `nil` until the first GPS fix arrives.
     @Published private(set) var liveScore: Int?
@@ -90,6 +104,7 @@ final class DriveRecorder: ObservableObject {
         phoneUseEvents = 0
         distanceKm = 0
         liveScore = nil
+        routeCoordinates = []
         lastCompletedDrive = nil
         errorMessage = nil
         startedAt = now()
@@ -99,6 +114,9 @@ final class DriveRecorder: ObservableObject {
         samples.connectedMode = connectedMode
 
         locationSampler.onSample = { [weak self] sample in self?.append(location: sample) }
+        locationSampler.onCoordinate = { [weak self] coordinate in
+            self?.append(coordinate: coordinate)
+        }
         motionSampler.onSample = { [weak self] sample in self?.append(motion: sample) }
         connectedModeDetector.onChange = { [weak self] isConnected in
             self?.updateConnectedMode(isConnected)
@@ -114,6 +132,7 @@ final class DriveRecorder: ObservableObject {
 
         isRecording = false
         locationSampler.onSample = nil
+        locationSampler.onCoordinate = nil
         motionSampler.onSample = nil
         connectedModeDetector.onChange = nil
         locationSampler.stop()
@@ -163,6 +182,14 @@ final class DriveRecorder: ObservableObject {
     }
 
     // MARK: - Samples
+
+    /// Appends one point of the on-device route (L11). Idle fixes are ignored for
+    /// the same reason the scoring samples are: nothing outside a drive counts.
+    private func append(coordinate: CLLocationCoordinate2D) {
+        guard isRecording else { return }
+
+        routeCoordinates.append(coordinate)
+    }
 
     private func append(location: LocationSample) {
         guard isRecording else { return }
@@ -220,6 +247,9 @@ final class DriveRecorder: ObservableObject {
         if !keepingSummary {
             distanceKm = 0
             liveScore = nil
+            // No usable fix means no route either: the detail screen must show its
+            // "no route on this device" state instead of a one-point line.
+            routeCoordinates = []
         }
     }
 }

@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 @testable import Drivy
 
@@ -5,6 +6,8 @@ import Foundation
 final class FakeLocationSampler: LocationSampling {
 
     var onSample: ((LocationSample) -> Void)?
+
+    var onCoordinate: ((CLLocationCoordinate2D) -> Void)?
 
     var isDenied = false
 
@@ -22,6 +25,11 @@ final class FakeLocationSampler: LocationSampling {
     /// Pushes fixes as CoreLocation would, on the main thread.
     func emit(_ samples: [LocationSample]) {
         samples.forEach { onSample?($0) }
+    }
+
+    /// Pushes route coordinates as CoreLocation would, on the main thread.
+    func emit(coordinates: [CLLocationCoordinate2D]) {
+        coordinates.forEach { onCoordinate?($0) }
     }
 
     /// Constant-speed drive in 10 s steps; the default is 10 m/s for 100 s = 1 km.
@@ -44,5 +52,21 @@ final class FakeLocationSampler: LocationSampling {
             time += step
         }
         return samples
+    }
+
+    /// A straight line of `count` points separated by `step` degrees, used to assert
+    /// the route the recorder exposes (L11).
+    static func straightRoute(
+        count: Int,
+        latitude: Double = 41.3874,
+        longitude: Double = 2.1686,
+        step: Double = 0.001
+    ) -> [CLLocationCoordinate2D] {
+        (0..<count).map { index in
+            CLLocationCoordinate2D(
+                latitude: latitude + Double(index) * step,
+                longitude: longitude + Double(index) * step
+            )
+        }
     }
 }

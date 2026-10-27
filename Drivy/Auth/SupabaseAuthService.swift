@@ -43,6 +43,13 @@ struct SupabaseAuthService: AuthServicing {
 private extension UserSummary {
 
     init(session: Session) {
-        self.init(id: session.user.id.uuidString, email: session.user.email)
+        // `createdAt` is `auth.users.created_at`, the same instant the
+        // `handle_new_user` trigger copies into `profiles.created_at`, so it is
+        // the account anchor the free history window counts from (S9, L10).
+        self.init(
+            id: session.user.id.uuidString,
+            email: session.user.email,
+            createdAt: session.user.createdAt
+        )
     }
 }

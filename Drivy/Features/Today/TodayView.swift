@@ -3,13 +3,35 @@ import UIKit
 
 /// Tab "Hoy" (S4, S6): manual drive recording, today's Driver Score, the streak
 /// and the list of the day's drives.
+///
+/// It is also where S9 shows up: the paywall after the first completed drive (once
+/// ever, never blocking) and the entry point to the Histórico, which is gated by the
+/// plan in force.
 struct TodayView: View {
 
     @EnvironmentObject private var auth: AuthViewModel
 
+    /// Plan and gating rules of the session (S9), owned by `RootView`.
+    @EnvironmentObject private var freemium: FreemiumService
+
+    /// Session owner of the freemium service: needed to move the free window to the
+    /// first drive date (L10).
+    @EnvironmentObject private var freemiumSession: FreemiumSessionCoordinator
+
     @StateObject private var recorder = DriveRecorder()
     @StateObject private var model = TodayViewModel()
-    @State private var isShowingShareCard = false
+    @State private var activeSheet: ActiveSheet?
+
+    /// "Presented once ever" flag of the paywall (S9).
+    private let paywallGate = FirstDrivePaywallGate()
+
+    /// Sheets of the tab, in one enum so two `.sheet` modifiers cannot fight.
+    private enum ActiveSheet: String, Identifiable {
+        case shareCard
+        case paywall
+
+        var id: String { rawValue }
+    }
 
     var body: some View {
         NavigationStack {
@@ -43,11 +65,22 @@ struct TodayView: View {
             .task(id: auth.signedInUser?.id) { await reload() }
             // A finished drive is written to `drives` and `daily_scores` by the
             // upload, so the day is read again as soon as the recorder has it.
-            .onChange(of: recorder.lastCompletedDrive) { _, _ in
-                Task { await reload() }
+            .onChange(of: recorder.lastCompletedDrive) { _, drive in
+                guard let drive else { return }
+                handleCompletedDrive(drive)
             }
-            .sheet(isPresented: $isShowingShareCard) {
-                ShareCardSheet(userID: signedInUserID)
+            // The plan can arrive after the drive (StoreKit is read at sign-in and
+            // on every transaction update), and S9 asks for the paywall once the
+            // plan is known to be Free.
+            .onChange(of: freemium.plan) { _, _ in presentPaywallIfNeeded() }
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .shareCard:
+                    ShareCardSheet(userID: signedInUserID)
+                case .paywall:
+                    PaywallPresenter(freemium: freemium)
+                        .makePaywallView(onClose: { activeSheet = nil })
+                }
             }
             // S5: coming back to the app during a drive means the phone was
             // unlocked and used, which is the closest available phone-use signal.
@@ -107,8 +140,20 @@ struct TodayView: View {
 
     private var drivesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Trayectos de hoy")
-                .font(.headline)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Trayectos de hoy")
+                    .font(.headline)
+
+                Spacer(minLength: 0)
+
+                // S9: the full history lives here, gated by the plan in force.
+                NavigationLink {
+                    HistoryView(days: model.snapshot.days)
+                } label: {
+                    Text("Histórico")
+                        .font(.subheadline)
+                }
+            }
 
             if model.snapshot.drives.isEmpty {
                 Text("Aún no hay trayectos hoy.")
@@ -130,12 +175,55 @@ struct TodayView: View {
 
     private var shareButton: some View {
         Button {
-            isShowingShareCard = true
+            activeSheet = .shareCard
         } label: {
             Label("Compartir mi tarjeta", systemImage: "square.and.arrow.up")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
+    }
+
+    // MARK: - S9 hooks
+
+    /// Everything that has to happen once the recorder has a finished drive.
+    ///
+    /// The route is handed over first (L11): it only exists in the recorder of this
+    /// session, and the detail screen of the drive that just finished reads it from
+    /// `LocalRouteStore`. Nothing here can block the recording that already ended
+    /// (S9/S12).
+    private func handleCompletedDrive(_ drive: DriveRecord) {
+        RouteHandoff.store(coordinates: recorder.routeCoordinates, startedAt: drive.startedAt)
+
+        // L10: the free history window starts at the first drive date when the
+        // profile is older. Done once per account.
+        freemiumSession.recordCompletedDrive(startedAt: drive.startedAt)
+
+        presentPaywallIfNeeded()
+
+        Task {
+            await reload()
+            // The reload is what makes today's drive count (and the plan read) known.
+            presentPaywallIfNeeded()
+        }
+    }
+
+    /// S9: the paywall appears after the first completed drive, once ever, and only
+    /// on the free plan. It is presentation state only: it never gates recording.
+    private func presentPaywallIfNeeded() {
+        // Only a drive finished in this session triggers the paywall: a plan that
+        // arrives later (StoreKit is slow, or the user just purchased) must not turn
+        // a launch into an ad for drives recorded days ago.
+        guard recorder.lastCompletedDrive != nil else { return }
+
+        let completedDriveCount = max(model.snapshot.drivesCount, 1)
+
+        guard paywallGate.shouldPresent(
+            completedDriveCount: completedDriveCount,
+            plan: freemium.plan
+        ) else { return }
+
+        paywallGate.markPresented()
+        activeSheet = .paywall
     }
 
     // MARK: - Data
@@ -308,4 +396,6 @@ private struct DriveCard: View {
 #Preview {
     TodayView()
         .environmentObject(AuthViewModel())
+        .environmentObject(FreemiumService(anchorDate: Date()))
+        .environmentObject(FreemiumSessionCoordinator())
 }

@@ -12,6 +12,15 @@ protocol LocationSampling: AnyObject {
     /// Called on the main queue for every accepted fix.
     var onSample: ((LocationSample) -> Void)? { get set }
 
+    /// Called on the main queue for every accepted fix, with the coordinate of
+    /// that fix (L11).
+    ///
+    /// The route travels on its own callback instead of inside `LocationSample`:
+    /// the scoring input stays free of CoreLocation values (S5 is scored from
+    /// speed and motion only) and the coordinates never leave the device (S10),
+    /// so they must not leak into the upload path.
+    var onCoordinate: ((CLLocationCoordinate2D) -> Void)? { get set }
+
     /// True when the user refused location access, i.e. no drive can be measured.
     var isDenied: Bool { get }
 
@@ -29,6 +38,8 @@ protocol LocationSampling: AnyObject {
 final class CoreLocationSampler: NSObject, LocationSampling {
 
     var onSample: ((LocationSample) -> Void)?
+
+    var onCoordinate: ((CLLocationCoordinate2D) -> Void)?
 
     private let manager: CLLocationManager
 
@@ -118,6 +129,8 @@ extension CoreLocationSampler: CLLocationManagerDelegate {
                     speedLimitKmh: nil
                 )
             )
+            // L11: the same accepted fix feeds the on-device route of the drive.
+            onCoordinate?(location.coordinate)
         }
     }
 

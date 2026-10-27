@@ -26,4 +26,6 @@ struct MainTabView: View {
 #Preview {
     MainTabView()
         .environmentObject(AuthViewModel())
+        .environmentObject(FreemiumService(anchorDate: Date()))
+        .environmentObject(FreemiumSessionCoordinator())
 }

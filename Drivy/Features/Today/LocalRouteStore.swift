@@ -29,10 +29,11 @@ struct DriveTrack: Equatable {
 
 /// Keeps the routes of the current launch in memory only.
 ///
-/// This is the single seam a local route needs: `DriveRecorder` (T3) does not
-/// expose coordinates yet, so nothing fills this store and the drive detail screen
-/// shows the stored summary with an explicit "no route on this device" state
-/// instead of drawing an invented line.
+/// This is the single seam a local route needs: `TodayView` hands the coordinates
+/// `DriveRecorder` exposed for the finished drive to `RouteHandoff`, which stores them
+/// here, and `DriveDetailView` looks them up by the drive's start timestamp (L11).
+/// A drive recorded on another device, or before this launch, has no track and the
+/// detail screen shows its "no route on this device" state instead of an invented line.
 final class LocalRouteStore {
 
     static let shared = LocalRouteStore()

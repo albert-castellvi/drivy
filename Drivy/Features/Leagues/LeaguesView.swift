@@ -1,28 +1,57 @@
 import SwiftUI
 
 /// Tab "Ligas" (S7): the user's leagues, creation and join by code.
+///
+/// S9: the free plan allows one league, created or joined, so both actions go
+/// through `LeagueLimitGate` and a blocked action offers the paywall instead.
 struct LeaguesView: View {
 
     @EnvironmentObject private var auth: AuthViewModel
 
+    /// Plan and gating rules of the session (S9), owned by `RootView`.
+    @EnvironmentObject private var freemium: FreemiumService
+
     @StateObject private var model = LeaguesViewModel()
-    @State private var isCreatingLeague = false
+    @State private var activeSheet: ActiveSheet?
     @State private var joinCode = ""
+
+    private enum ActiveSheet: String, Identifiable {
+        case createLeague
+        case paywall
+
+        var id: String { rawValue }
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 leaguesSection
+                limitSection
                 joinSection
                 createSection
             }
             .navigationTitle("Ligas")
             .refreshable { await reload() }
             .task(id: auth.signedInUser?.id) { await reload() }
-            .sheet(isPresented: $isCreatingLeague) {
-                CreateLeagueSheet(model: model, userID: signedInUserID)
+            .sheet(item: $activeSheet) { sheet in
+                switch sheet {
+                case .createLeague:
+                    CreateLeagueSheet(
+                        model: model,
+                        userID: signedInUserID,
+                        access: freemium.access
+                    )
+                case .paywall:
+                    PaywallPresenter(freemium: freemium)
+                        .makePaywallView(onClose: { activeSheet = nil })
+                }
             }
         }
+    }
+
+    /// Whether the plan in force blocks another league (S9).
+    private var isLeagueLimitReached: Bool {
+        model.isLeagueLimitReached(access: freemium.access)
     }
 
     // MARK: - Sections
@@ -89,10 +118,35 @@ struct LeaguesView: View {
         }
     }
 
+    /// S9: shown while the free plan's one-league cap is in force, so the cap is
+    /// never a silent refusal.
+    @ViewBuilder
+    private var limitSection: some View {
+        if isLeagueLimitReached {
+            Section {
+                Label(LeagueLimitGate.limitMessage, systemImage: "lock.fill")
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    activeSheet = .paywall
+                } label: {
+                    Label(PaywallCopy.title, systemImage: "star.fill")
+                }
+            } header: {
+                Text("Plan Free")
+            }
+        }
+    }
+
     private var createSection: some View {
         Section {
             Button {
-                isCreatingLeague = true
+                guard !isLeagueLimitReached else {
+                    activeSheet = .paywall
+                    return
+                }
+                activeSheet = .createLeague
             } label: {
                 Label("Crear liga", systemImage: "plus.circle.fill")
             }
@@ -115,7 +169,14 @@ struct LeaguesView: View {
 
     private func join() async {
         guard let userID = auth.signedInUser?.id else { return }
-        let joined = await model.joinLeague(code: joinCode, userID: userID)
+
+        // S9: the free plan's cap offers the paywall instead of a failed request.
+        guard !isLeagueLimitReached else {
+            activeSheet = .paywall
+            return
+        }
+
+        let joined = await model.joinLeague(code: joinCode, userID: userID, access: freemium.access)
         if joined {
             joinCode = ""
         }
@@ -128,6 +189,9 @@ private struct CreateLeagueSheet: View {
     @ObservedObject var model: LeaguesViewModel
 
     let userID: String
+
+    /// S9 snapshot, passed through so the sheet gates with the same rules as the tab.
+    let access: FreemiumAccess?
 
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
@@ -157,7 +221,11 @@ private struct CreateLeagueSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Crear") {
                         Task {
-                            let created = await model.createLeague(name: name, userID: userID)
+                            let created = await model.createLeague(
+                                name: name,
+                                userID: userID,
+                                access: access
+                            )
                             if created {
                                 dismiss()
                             }
@@ -173,4 +241,5 @@ private struct CreateLeagueSheet: View {
 #Preview {
     LeaguesView()
         .environmentObject(AuthViewModel())
+        .environmentObject(FreemiumService(anchorDate: Date()))
 }

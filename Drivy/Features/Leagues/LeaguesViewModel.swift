@@ -58,13 +58,26 @@ final class LeaguesViewModel: ObservableObject {
 
     /// Creates the league and joins it as its first member. Returns true when the
     /// league exists in the backend afterwards.
+    ///
+    /// `access` is the S9 snapshot of the plan in force: a free account belongs to at
+    /// most one league, so the call is refused before touching the backend. `nil`
+    /// (plan still unknown) never blocks.
     @discardableResult
-    func createLeague(name: String, userID: String) async -> Bool {
+    func createLeague(
+        name: String,
+        userID: String,
+        access: FreemiumAccess? = nil
+    ) async -> Bool {
         createErrorMessage = nil
 
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             createErrorMessage = Self.emptyNameMessage
+            return false
+        }
+
+        guard !isLeagueLimitReached(access: access) else {
+            createErrorMessage = LeagueLimitGate.limitMessage
             return false
         }
 
@@ -90,13 +103,21 @@ final class LeaguesViewModel: ObservableObject {
     /// Joins a league with the code (or the whole invite link). The member cap is
     /// enforced by `public.join_league_by_code`, so its failures are what the UI
     /// translates. Returns true when the user is a member afterwards.
+    ///
+    /// `access` is the S9 snapshot: the free plan's one-league cap is enforced here
+    /// so the RPC is not even called. `nil` (plan still unknown) never blocks.
     @discardableResult
-    func joinLeague(code: String, userID: String) async -> Bool {
+    func joinLeague(code: String, userID: String, access: FreemiumAccess? = nil) async -> Bool {
         joinErrorMessage = nil
 
         let normalized = LeagueInviteLink.code(fromUserInput: code)
         guard normalized.count == LeagueInviteCode.length else {
             joinErrorMessage = Self.invalidCodeMessage
+            return false
+        }
+
+        guard !isLeagueLimitReached(access: access) else {
+            joinErrorMessage = LeagueLimitGate.limitMessage
             return false
         }
 
@@ -115,5 +136,13 @@ final class LeaguesViewModel: ObservableObject {
             joinErrorMessage = LeagueJoinFailure.unknown.message
             return false
         }
+    }
+
+    // MARK: - Freemium cap (S9)
+
+    /// Whether the plan in force blocks another league. Kept on the view model so
+    /// the view and the create/join guards share one implementation.
+    func isLeagueLimitReached(access: FreemiumAccess?) -> Bool {
+        LeagueLimitGate.isAtLimit(access: access, leagueCount: leagues.count)
     }
 }
