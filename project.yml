@@ -1,7 +1,7 @@
 # Drivy — XcodeGen project spec.
 #
 # The .xcodeproj is generated, never committed: run `xcodegen generate` before
-# building (CI does this on the macos-15 runner, see S11).
+# building (CI does this on the macos-26 runner, see S11).
 #
 # Identity is fixed by the feature document (S14, L5): bundle id
 # `com.acrstudio.drivy`, display name `Drivy`, scheme `Drivy`.

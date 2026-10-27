@@ -190,7 +190,7 @@ struct TodayView: View {
             Label("Compartir mi tarjeta", systemImage: "square.and.arrow.up")
                 .frame(maxWidth: .infinity)
         }
-        .glassOrBordered()
+        .buttonStyle(.bordered)
     }
 
     // MARK: - S9 hooks
@@ -319,7 +319,7 @@ private struct DriveCard: View {
                 Text(buttonTitle)
                     .frame(maxWidth: .infinity)
             }
-            .glassProminentOrBorderedProminent()
+            .buttonStyle(.borderedProminent)
             .disabled(recorder.isSaving)
 
             if let errorMessage = recorder.errorMessage {
