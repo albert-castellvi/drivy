@@ -6,6 +6,9 @@ struct SignInView: View {
 
     @EnvironmentObject private var auth: AuthViewModel
 
+    /// Size of the brand icon, scaled with Dynamic Type instead of frozen at 56 pt.
+    @ScaledMetric(relativeTo: .title) private var brandIconSize: CGFloat = 56
+
     /// Failure copy produced by the view model, if the last attempt failed.
     private var failureMessage: String? {
         if case .failed(let message) = auth.state {
@@ -20,7 +23,9 @@ struct SignInView: View {
 
             VStack(spacing: 12) {
                 Image(systemName: "car.fill")
-                    .font(.system(size: 56, weight: .semibold))
+                    .font(.system(size: brandIconSize, weight: .semibold))
+                    // Decorative: the app name right below is the real heading.
+                    .accessibilityHidden(true)
 
                 Text(DrivyConfig.appDisplayName)
                     .font(.largeTitle.bold())

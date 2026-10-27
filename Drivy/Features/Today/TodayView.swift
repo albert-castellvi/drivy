@@ -22,6 +22,11 @@ struct TodayView: View {
     @StateObject private var model = TodayViewModel()
     @State private var activeSheet: ActiveSheet?
 
+    /// Size of the hero Driver Score, scaled with Dynamic Type instead of frozen
+    /// at 44 pt: the score is the main number of the screen and has to grow with
+    /// the reader's preferred text size.
+    @ScaledMetric(relativeTo: .largeTitle) private var scoreSize: CGFloat = 44
+
     /// "Presented once ever" flag of the paywall (S9).
     private let paywallGate = FirstDrivePaywallGate()
 
@@ -101,7 +106,7 @@ struct TodayView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(DriveFormat.score(model.snapshot.score))
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: scoreSize, weight: .bold, design: .rounded))
                     .monospacedDigit()
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -152,6 +157,11 @@ struct TodayView: View {
                 } label: {
                     Text("Histórico")
                         .font(.subheadline)
+                        // HIG touch target: the bare text label was only ~20 pt
+                        // tall. The frame keeps it trailing, the shape makes the
+                        // whole 44 pt tappable.
+                        .frame(minHeight: 44, alignment: .trailing)
+                        .contentShape(Rectangle())
                 }
             }
 
@@ -263,10 +273,15 @@ private struct DriveSummaryRow: View {
             Text(DriveFormat.score(drive.score))
                 .font(.title3.monospacedDigit().weight(.semibold))
 
+            // The chevron only says "there is a detail screen": the row already
+            // opens it, so announcing "chevron right" only adds noise.
             Image(systemName: "chevron.right")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
+        // One element per row: the numbers are read in the order they are shown.
+        .accessibilityElement(children: .combine)
         .contentShape(Rectangle())
     }
 }
@@ -288,6 +303,9 @@ private struct DriveCard: View {
                         metric("Distancia", value: distanceText)
                         metric("Nota", value: scoreText)
                     }
+                    // One element instead of three stops while the drive runs;
+                    // the labels are already in reading order.
+                    .accessibilityElement(children: .combine)
                 }
             }
 
