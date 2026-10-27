@@ -36,6 +36,12 @@ packages:
   Supabase:
     url: https://github.com/supabase/supabase-swift
     from: "2.0.0"
+  # sentry-cocoa (S3): crashes, app hangs and handled errors. Major version
+  # pinned like Supabase above. Major 8 keeps the Swift API this app uses
+  # (`SentrySDK.start { options in }`).
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    from: "8.0.0"
 
 targets:
   Drivy:
@@ -51,6 +57,8 @@ targets:
     dependencies:
       - package: Supabase
         product: Supabase
+      - package: Sentry
+        product: Sentry
     attributes:
       SystemCapabilities:
         # Sign in with Apple capability (S10: Apple requires it for social login).
