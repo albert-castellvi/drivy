@@ -25,10 +25,13 @@ Comandos ejecutados localmente (si aplica):
 
 ## Checklist CI (S11)
 
-El workflow `.github/workflows/ci.yml` corre en macOS:
+El workflow `.github/workflows/ci.yml` corre en macOS, image estable
+`macos-26` con su Xcode 26.6 por defecto (sin `DEVELOPER_DIR` pinneado):
 
 - **PR**: `xcodegen generate` + `xcodebuild test` en simulador
-  `iPhone 16` (scheme `Drivy`). Es lo que valida el PR.
+  `iPhone 17` (scheme `Drivy`). Es lo que valida el PR. Antes de los tests, un
+  paso comprueba que ese simulador exista en las runtimes de la imagen y, si no,
+  falla imprimiendo `xcrun simctl list devices available`.
 - **main**: antes de archivar, un paso provisiona el material de firma vía
   **API REST de App Store Connect** (`.github/scripts/provision-signing.sh`):
   asegura el App ID `com.acrstudio.drivy` y su capability de Sign in with

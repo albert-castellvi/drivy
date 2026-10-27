@@ -111,6 +111,36 @@ final class HistoryGatingTests: XCTestCase {
         XCTAssertEqual(rows, allDays.map(HistoryRow.day))
     }
 
+    // MARK: - Row identity
+
+    /// `HistoryView` renders the rows with `ForEach(rows)`, so every row needs an
+    /// id that outlives the recomputation of `HistoryGating.rows`: the day key for
+    /// a day row, and one fixed value for the single upsell row.
+    func testRowIdentityIsTheDayKeyOrTheFixedLockedValue() {
+        let day = days(count: 1, daysSinceAnchor: 3)[0]
+
+        XCTAssertEqual(HistoryRow.day(day).id, "day-3")
+        XCTAssertEqual(HistoryRow.day(day).id, day.dayKey)
+        // The upsell row is one row whatever it counts, so its id cannot depend
+        // on the number of hidden days.
+        XCTAssertEqual(HistoryRow.locked(hiddenDayCount: 3).id, "locked")
+        XCTAssertEqual(HistoryRow.locked(hiddenDayCount: 12).id, "locked")
+    }
+
+    /// Recomputing the rows (every render does) must not change any id, and no two
+    /// rows of a list may share one: that is what makes `ForEach` keep its rows.
+    func testRowIdentityIsStableAndUniqueAcrossRecomputation() {
+        let allDays = days(count: 5, daysSinceAnchor: 10)
+        let plan = access(plan: .free, daysSinceAnchor: 10)
+
+        let rows = HistoryGating.rows(days: allDays, access: plan)
+        let recomputed = HistoryGating.rows(days: allDays, access: plan)
+
+        XCTAssertEqual(rows.map(\.id), ["day-10", "locked"])
+        XCTAssertEqual(rows.map(\.id), recomputed.map(\.id))
+        XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
+    }
+
     // MARK: - Empty
 
     func testNoDaysProduceNoRows() {

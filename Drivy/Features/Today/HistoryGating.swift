@@ -1,7 +1,11 @@
 import Foundation
 
 /// One row of the Histórico list (S9).
-enum HistoryRow: Equatable {
+///
+/// The list renders these with `ForEach(rows)`, so identity has to be stable
+/// across the recomputation of `HistoryGating.rows` on every render: a row is
+/// identified by the day it shows, never by its position.
+enum HistoryRow: Equatable, Identifiable {
 
     /// A day the plan in force may see.
     case day(HistoryDay)
@@ -9,6 +13,18 @@ enum HistoryRow: Equatable {
     /// Days hidden by the free plan, collapsed into a single upsell row: one lock
     /// per hidden day would bury the days the user can still see.
     case locked(hiddenDayCount: Int)
+
+    /// Identity of the row: the `yyyy-MM-dd` key of the day, or `"locked"` for
+    /// the upsell row. Day keys and the locked row cannot collide, and there is
+    /// at most one locked row per list, so the two namespaces never meet.
+    var id: String {
+        switch self {
+        case .day(let day):
+            return day.dayKey
+        case .locked:
+            return "locked"
+        }
+    }
 }
 
 /// Gating of the Histórico list (S9).

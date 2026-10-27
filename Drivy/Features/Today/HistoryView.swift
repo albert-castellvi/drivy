@@ -29,7 +29,7 @@ struct HistoryView: View {
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            ForEach(rows) { row in
                 switch row {
                 case .day(let day):
                     dayRow(day)

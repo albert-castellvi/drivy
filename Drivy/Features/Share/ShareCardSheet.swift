@@ -47,7 +47,7 @@ struct ShareCardSheet: View {
                     Label("Compartir en stories", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .glassProminentOrBorderedProminent()
             } else {
                 ProgressView()
             }
