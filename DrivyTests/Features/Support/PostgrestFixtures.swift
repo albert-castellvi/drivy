@@ -45,15 +45,53 @@ enum PostgrestFixtures {
     }
     """
 
-    /// `public.league_weekly_ranking(...)` row: `rank` is a bigint and
-    /// `avg_score`/`total_km` are numerics, so everything can arrive as a string.
+    /// `public.league_weekly_ranking(...)` row (S5): `rank` and `week_xp` are
+    /// bigints, so both can arrive as strings.
     static let rankingRowJSON = """
     {
       "rank": "1",
       "user_id": "11111111-2222-3333-4444-555555555555",
       "display_name": "Ana",
-      "avg_score": "91.6",
-      "total_km": "34.20"
+      "week_xp": "180"
+    }
+    """
+
+    /// `public.public_league_entries` own row (S5): `division` is a smallint and
+    /// `opted_in` a boolean.
+    static let publicLeagueStatusJSON = """
+    {"division": "2", "opted_in": true}
+    """
+
+    /// `public.public_league_current()` row (S5): `week_start` is a `date`, which
+    /// PostgREST sends as `yyyy-MM-dd` text.
+    static let publicLeagueCurrentJSON = """
+    {
+      "group_id": "9a8b7c6d-1111-4222-8333-944455556666",
+      "week_start": "2023-11-13",
+      "division": 2,
+      "last_change": 1
+    }
+    """
+
+    /// `public.public_league_ranking()` row (S5) inside the promotion band.
+    static let publicLeagueRankingRowJSON = """
+    {
+      "place": "3",
+      "user_id": "11111111-2222-3333-4444-555555555555",
+      "display_name": "Ana",
+      "week_xp": "120",
+      "zone": "promotion"
+    }
+    """
+
+    /// Same row outside both bands: `zone` is SQL `null`.
+    static let publicLeagueRankingRowWithoutZoneJSON = """
+    {
+      "place": 9,
+      "user_id": "22222222-3333-4444-5555-666666666666",
+      "display_name": "Bruno",
+      "week_xp": 40,
+      "zone": null
     }
     """
 }

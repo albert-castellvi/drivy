@@ -1,8 +1,11 @@
 import Combine
 import Foundation
 
-/// Weekly ranking of one league (S7), read from
+/// Weekly ranking of one private league (S5), read from
 /// `public.league_weekly_ranking(league_id, week_start)`.
+///
+/// Private leagues rank by weekly XP, the same number as the public ones: the
+/// old score-plus-kilometres ranking is gone because it rewarded driving more.
 @MainActor
 final class LeagueRankingViewModel: ObservableObject {
 
@@ -15,7 +18,7 @@ final class LeagueRankingViewModel: ObservableObject {
 
     @Published private(set) var errorMessage: String?
 
-    /// Header of the list, e.g. `13 nov`.
+    /// Header of the list, e.g. `13 nov`, the Monday of the week being ranked.
     @Published private(set) var weekStartLabel = ""
 
     let leagueID: String

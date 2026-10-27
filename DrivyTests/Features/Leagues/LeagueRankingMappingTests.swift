@@ -1,8 +1,9 @@
 import XCTest
 @testable import Drivy
 
-/// The weekly ranking and the league rows must map the RPC/table columns of the
-/// schema (S7, S10).
+/// The weekly rankings must map the RPC/table columns of the schema (S5, S10).
+/// Both rankings sort by weekly XP: the old `avg_score`/`total_km` columns are
+/// gone from `league_weekly_ranking`.
 final class LeagueRankingMappingTests: XCTestCase {
 
     func testRankingRowMapsTheRpcColumns() throws {
@@ -14,9 +15,8 @@ final class LeagueRankingMappingTests: XCTestCase {
         XCTAssertEqual(row.rank, 1)
         XCTAssertEqual(row.userID, "11111111-2222-3333-4444-555555555555")
         XCTAssertEqual(row.displayName, "Ana")
-        // 91.6 is rounded to the nearest point, like every score in the app.
-        XCTAssertEqual(row.averageScore, 92)
-        XCTAssertEqual(row.totalKm, 34.2)
+        XCTAssertEqual(row.weekXP, 180)
+        XCTAssertEqual(row.xpText, "180 XP")
         XCTAssertEqual(row.id, row.userID)
     }
 
@@ -26,16 +26,15 @@ final class LeagueRankingMappingTests: XCTestCase {
           "rank": 2,
           "user_id": "22222222-3333-4444-5555-666666666666",
           "display_name": "Bruno",
-          "avg_score": 88,
-          "total_km": 12.5
+          "week_xp": 0
         }
         """
 
         let row = try PostgrestFixtures.decode(LeagueRankingRow.self, from: json)
 
         XCTAssertEqual(row.rank, 2)
-        XCTAssertEqual(row.averageScore, 88)
-        XCTAssertEqual(row.totalKm, 12.5)
+        XCTAssertEqual(row.weekXP, 0)
+        XCTAssertEqual(row.xpText, "0 XP")
     }
 
     func testLeagueRowMapsTheSchemaColumns() throws {
