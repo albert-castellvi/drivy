@@ -21,6 +21,9 @@
 #     APP_STORE_CONNECT_API_KEY_ID       key id of the ASC API key (10 chars)
 #     APP_STORE_CONNECT_API_ISSUER_ID    issuer id of that key (UUID)
 #     APP_STORE_CONNECT_API_KEY_BASE64   base64 of AuthKey_<KEYID>.p8
+#     SENTRY_AUTH_TOKEN                  Sentry auth token for the dSYM upload
+#                                        (optional: without it step 6 warns and
+#                                        skips)
 #   The Apple Developer team id (QP5A6D4Y4P) is public and hardcoded in the job
 #   env. No .p12 or .mobileprovision secret is needed: the Apple Distribution
 #   certificate and the App Store provisioning profile are created on the fly
@@ -49,9 +52,12 @@
 #     5. `xcodebuild -exportArchive` with an inline exportOptions.plist
 #        (method app-store, teamID, signingStyle manual, signingCertificate,
 #        provisioningProfiles, uploadSymbols);
-#     6. `xcrun altool --upload-app -t ios` against TestFlight. A failing upload
+#     6. (S5) upload the archive's dSYMs to Sentry so Release crashes are
+#        symbolicated. Needs the SENTRY_AUTH_TOKEN secret; without it the step
+#        prints a warning and exits 0, so a missing token never fails the build;
+#     7. `xcrun altool --upload-app -t ios` against TestFlight. A failing upload
 #        fails the job and prints the full altool log;
-#     7. the temporary job keychain is deleted.
+#     8. the temporary job keychain is deleted.
 #
 #   Why manual signing: automatic cloud signing failed on this team with
 #   "Your team has no devices from which to generate a provisioning profile"
@@ -423,6 +429,38 @@ jobs:
           fi
           echo "Exported: $ipa"
           du -sh "$ipa"
+
+      # S5: a Release crash is only readable when the dSYMs of that exact build
+      # reach Sentry. Optional on purpose — a missing or expired token must not
+      # block the TestFlight upload — so the step is continue-on-error and also
+      # exits 0 by itself when the secret is empty.
+      - name: Upload dSYMs to Sentry
+        if: steps.signing.outputs.signed == 'true'
+        continue-on-error: true
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -o pipefail
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "::warning::SENTRY_AUTH_TOKEN not set; skipping dSYM upload"
+            exit 0
+          fi
+          # The official installer puts sentry-cli on PATH (and falls back to
+          # ./bin), so both locations are resolved before giving up.
+          curl -sL https://sentry.io/get-cli/ | bash
+          cli="$(command -v sentry-cli || true)"
+          if [ -z "$cli" ] && [ -x "$PWD/bin/sentry-cli" ]; then
+            cli="$PWD/bin/sentry-cli"
+          fi
+          if [ -z "$cli" ]; then
+            echo "::warning::sentry-cli could not be installed; skipping dSYM upload"
+            exit 0
+          fi
+          "$cli" debug-files upload \
+            --org acr-studio \
+            --project drivy \
+            --include-sources \
+            build/Drivy.xcarchive/dSYMs
 
       # altool is still Apple's supported CLI upload path for iOS binaries with
       # an App Store Connect API key. Any failure here — including Apple-side

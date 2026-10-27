@@ -13,14 +13,25 @@ final class AuthViewModelTests: XCTestCase {
     private func makeSUT(
         restoredUser: UserSummary? = nil,
         signInOutcome: Result<UserSummary, Error> = .success(AuthViewModelTests.user)
-    ) -> (sut: AuthViewModel, authService: FakeAuthService, appleProvider: FakeAppleSignInProvider) {
+    ) -> (
+        sut: AuthViewModel,
+        authService: FakeAuthService,
+        appleProvider: FakeAppleSignInProvider,
+        reporter: FakeCrashReporter
+    ) {
         let authService = FakeAuthService()
         authService.restoredUser = restoredUser
         authService.signInOutcome = signInOutcome
 
         let appleProvider = FakeAppleSignInProvider()
-        let sut = AuthViewModel(authService: authService, appleSignInProvider: appleProvider)
-        return (sut, authService, appleProvider)
+        let reporter = FakeCrashReporter()
+        let sut = AuthViewModel(
+            authService: authService,
+            appleSignInProvider: appleProvider,
+            reportError: reporter.report,
+            setReportedUser: reporter.setUser
+        )
+        return (sut, authService, appleProvider, reporter)
     }
 
     /// Starts a sign-in and waits until the Apple sheet is actually in flight.
@@ -39,14 +50,14 @@ final class AuthViewModelTests: XCTestCase {
     // MARK: - Restore
 
     func testStateStartsAsRestoring() {
-        let (sut, _, _) = makeSUT()
+        let (sut, _, _, _) = makeSUT()
 
         XCTAssertEqual(sut.state, .restoring)
         XCTAssertNil(sut.signedInUser)
     }
 
     func testRestoreSessionSignsInWhenASessionIsPersisted() async {
-        let (sut, authService, _) = makeSUT(restoredUser: Self.user)
+        let (sut, authService, _, _) = makeSUT(restoredUser: Self.user)
 
         await sut.restoreSession()
 
@@ -56,7 +67,7 @@ final class AuthViewModelTests: XCTestCase {
     }
 
     func testRestoreSessionSignsOutWhenThereIsNoSession() async {
-        let (sut, _, _) = makeSUT(restoredUser: nil)
+        let (sut, _, _, _) = makeSUT(restoredUser: nil)
 
         await sut.restoreSession()
 
@@ -65,7 +76,7 @@ final class AuthViewModelTests: XCTestCase {
     }
 
     func testRestoreSessionRunsOnlyOnce() async {
-        let (sut, authService, _) = makeSUT(restoredUser: Self.user)
+        let (sut, authService, _, _) = makeSUT(restoredUser: Self.user)
 
         await sut.restoreSession()
         await sut.restoreSession()
@@ -77,7 +88,7 @@ final class AuthViewModelTests: XCTestCase {
     // MARK: - Sign in with Apple
 
     func testSignInWithAppleSignsInAndForwardsTheCredential() async {
-        let (sut, authService, appleProvider) = makeSUT()
+        let (sut, authService, appleProvider, _) = makeSUT()
         let task = await startSignIn(sut, appleProvider)
 
         XCTAssertEqual(sut.state, .authenticating)
@@ -93,7 +104,7 @@ final class AuthViewModelTests: XCTestCase {
     }
 
     func testSignInWithAppleCancellationReturnsToSignedOut() async {
-        let (sut, authService, appleProvider) = makeSUT()
+        let (sut, authService, appleProvider, _) = makeSUT()
         let task = await startSignIn(sut, appleProvider)
 
         appleProvider.fail(with: AppleSignInError.cancelled)
@@ -104,7 +115,7 @@ final class AuthViewModelTests: XCTestCase {
     }
 
     func testSignInWithAppleFailureShowsTheExactMessage() async {
-        let (sut, _, appleProvider) = makeSUT()
+        let (sut, _, appleProvider, _) = makeSUT()
         let task = await startSignIn(sut, appleProvider)
 
         appleProvider.fail(with: AppleSignInError.failed("boom"))
@@ -116,7 +127,7 @@ final class AuthViewModelTests: XCTestCase {
     }
 
     func testSignInWithAppleFailsWhenTheTokenExchangeFails() async {
-        let (sut, authService, appleProvider) = makeSUT(
+        let (sut, authService, appleProvider, _) = makeSUT(
             signInOutcome: .failure(FakeAuthService.FakeError.network)
         )
         let task = await startSignIn(sut, appleProvider)
@@ -130,7 +141,7 @@ final class AuthViewModelTests: XCTestCase {
     }
 
     func testSignInWithAppleIsIgnoredWhileAlreadyAuthenticating() async {
-        let (sut, authService, appleProvider) = makeSUT()
+        let (sut, authService, appleProvider, _) = makeSUT()
         let firstRequest = await startSignIn(sut, appleProvider)
 
         await sut.signInWithApple()
@@ -149,7 +160,7 @@ final class AuthViewModelTests: XCTestCase {
     // MARK: - Sign out
 
     func testSignOutClearsTheSession() async {
-        let (sut, authService, _) = makeSUT(restoredUser: Self.user)
+        let (sut, authService, _, _) = makeSUT(restoredUser: Self.user)
         await sut.restoreSession()
 
         await sut.signOut()
@@ -160,7 +171,7 @@ final class AuthViewModelTests: XCTestCase {
     }
 
     func testSignOutFailureShowsTheExactMessage() async {
-        let (sut, authService, _) = makeSUT(restoredUser: Self.user)
+        let (sut, authService, _, _) = makeSUT(restoredUser: Self.user)
         await sut.restoreSession()
         authService.signOutError = FakeAuthService.FakeError.network
 
@@ -168,6 +179,103 @@ final class AuthViewModelTests: XCTestCase {
 
         XCTAssertEqual(sut.state, .failed(message: AuthViewModel.signOutFailureMessage))
         XCTAssertEqual(sut.state, .failed(message: "No hemos podido cerrar sesión. Inténtalo de nuevo."))
+    }
+
+    // MARK: - Crash reporting (S4)
+
+    func testSignInFailureIsReportedWithTheRealError() async {
+        let (sut, _, appleProvider, reporter) = makeSUT()
+        let task = await startSignIn(sut, appleProvider)
+
+        appleProvider.fail(with: AppleSignInError.failed("boom"))
+        await task.value
+
+        XCTAssertEqual(reporter.reportedErrors.count, 1)
+        XCTAssertEqual(reporter.reportedErrors.first as? AppleSignInError, .failed("boom"))
+        // A failed sign-in must not claim a user.
+        XCTAssertTrue(reporter.reportedUserIds.isEmpty)
+    }
+
+    func testTokenExchangeFailureIsReportedWithTheRealError() async {
+        let (sut, _, appleProvider, reporter) = makeSUT(
+            signInOutcome: .failure(FakeAuthService.FakeError.network)
+        )
+        let task = await startSignIn(sut, appleProvider)
+
+        appleProvider.complete(with: Self.credential)
+        await task.value
+
+        XCTAssertEqual(reporter.reportedErrors.count, 1)
+        XCTAssertEqual(reporter.reportedErrors.first as? FakeAuthService.FakeError, .network)
+        XCTAssertTrue(reporter.reportedUserIds.isEmpty)
+    }
+
+    /// Cancelling the Apple sheet is the user's own decision, not a failure.
+    func testSignInCancellationReportsNothing() async {
+        let (sut, _, appleProvider, reporter) = makeSUT()
+        let task = await startSignIn(sut, appleProvider)
+
+        appleProvider.fail(with: AppleSignInError.cancelled)
+        await task.value
+
+        XCTAssertEqual(sut.state, .signedOut)
+        XCTAssertTrue(reporter.reportedErrors.isEmpty)
+        XCTAssertTrue(reporter.reportedUserIds.isEmpty)
+    }
+
+    func testSignInSetsTheReportedUserId() async {
+        let (sut, _, appleProvider, reporter) = makeSUT()
+        let task = await startSignIn(sut, appleProvider)
+
+        appleProvider.complete(with: Self.credential)
+        await task.value
+
+        XCTAssertEqual(reporter.reportedUserIds, [Self.user.id])
+        XCTAssertEqual(reporter.lastReportedUserId, Self.user.id)
+    }
+
+    func testRestoreSessionSetsTheReportedUserId() async {
+        let (sut, _, _, reporter) = makeSUT(restoredUser: Self.user)
+
+        await sut.restoreSession()
+
+        XCTAssertEqual(reporter.reportedUserIds, [Self.user.id])
+    }
+
+    func testSignOutClearsTheReportedUserId() async {
+        let (sut, _, _, reporter) = makeSUT(restoredUser: Self.user)
+        await sut.restoreSession()
+
+        await sut.signOut()
+
+        // Set on restore, cleared on sign out: the second entry is an explicit nil.
+        XCTAssertEqual(reporter.reportedUserIds, [Self.user.id, nil])
+        XCTAssertNil(reporter.lastReportedUserId)
+    }
+
+    func testSignOutFailureIsReportedWithTheRealError() async {
+        let (sut, authService, _, reporter) = makeSUT(restoredUser: Self.user)
+        await sut.restoreSession()
+        authService.signOutError = FakeAuthService.FakeError.network
+
+        await sut.signOut()
+
+        XCTAssertEqual(reporter.reportedErrors.count, 1)
+        XCTAssertEqual(reporter.reportedErrors.first as? FakeAuthService.FakeError, .network)
+        // The session is still there, so the reported user is not cleared.
+        XCTAssertEqual(reporter.reportedUserIds, [Self.user.id])
+    }
+
+    /// Reporting is a side channel: it must not change what the user reads.
+    func testReportingDoesNotChangeTheFailureMessage() async {
+        let (sut, _, appleProvider, reporter) = makeSUT()
+        let task = await startSignIn(sut, appleProvider)
+
+        appleProvider.fail(with: AppleSignInError.failed("boom"))
+        await task.value
+
+        XCTAssertEqual(reporter.reportedErrors.count, 1)
+        XCTAssertEqual(sut.state, .failed(message: "No hemos podido iniciar sesión. Inténtalo de nuevo."))
     }
 
     // MARK: - User summary

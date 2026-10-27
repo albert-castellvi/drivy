@@ -3,8 +3,9 @@ import Foundation
 
 /// Owns the authentication state machine of the shell.
 ///
-/// Both dependencies are protocols so the whole flow can be exercised in unit
-/// tests without a network or an Apple sheet.
+/// The auth and Apple dependencies are protocols, and crash reporting is a
+/// pair of closures, so the whole flow can be exercised in unit tests without a
+/// network, an Apple sheet or a started Sentry SDK.
 @MainActor
 final class AuthViewModel: ObservableObject {
 
@@ -16,17 +17,24 @@ final class AuthViewModel: ObservableObject {
 
     private let authService: AuthServicing
     private let appleSignInProvider: AppleSignInProviding
+    /// Crash reporting, injected so tests can assert what was reported (S4).
+    private let reportError: (Error) -> Void
+    private let setReportedUser: (String?) -> Void
     private var didRestoreSession = false
 
     init(
         authService: AuthServicing = SupabaseAuthService(),
-        appleSignInProvider: AppleSignInProviding? = nil
+        appleSignInProvider: AppleSignInProviding? = nil,
+        reportError: @escaping (Error) -> Void = CrashReporting.capture,
+        setReportedUser: @escaping (String?) -> Void = CrashReporting.setUser
     ) {
         self.authService = authService
         // Default arguments are evaluated in a nonisolated context, and
         // AppleSignInCoordinator is @MainActor (ASAuthorization delegate
         // callbacks), so the real default is built here instead.
         self.appleSignInProvider = appleSignInProvider ?? AppleSignInCoordinator()
+        self.reportError = reportError
+        self.setReportedUser = setReportedUser
     }
 
     var signedInUser: UserSummary? {
@@ -42,6 +50,7 @@ final class AuthViewModel: ObservableObject {
         state = .restoring
         if let user = await authService.restoreSession() {
             state = .signedIn(user)
+            setReportedUser(user.id)
         } else {
             state = .signedOut
         }
@@ -60,10 +69,13 @@ final class AuthViewModel: ObservableObject {
                 rawNonce: credential.rawNonce
             )
             state = .signedIn(user)
+            setReportedUser(user.id)
         } catch AppleSignInError.cancelled {
-            // Dismissing the sheet is not an error worth showing.
+            // Dismissing the sheet is not an error worth showing, nor worth
+            // reporting: the user did exactly what they meant to.
             state = .signedOut
         } catch {
+            reportError(error)
             state = .failed(message: Self.signInFailureMessage)
         }
     }
@@ -72,7 +84,9 @@ final class AuthViewModel: ObservableObject {
         do {
             try await authService.signOut()
             state = .signedOut
+            setReportedUser(nil)
         } catch {
+            reportError(error)
             state = .failed(message: Self.signOutFailureMessage)
         }
     }

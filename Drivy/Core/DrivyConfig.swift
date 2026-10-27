@@ -25,6 +25,13 @@ enum DrivyConfig {
         return url
     }()
 
+    // MARK: - Sentry (S2, S3)
+
+    /// Data source name (DSN) of the `drivy` project in the `acr-studio`
+    /// Sentry organization. Public by design, like the Supabase publishable
+    /// key: a DSN only allows sending events, never reading them.
+    static let sentryDSN = "https://be603a3e9e3a1da9f84f3324c81aa0be@o4512266155261952.ingest.de.sentry.io/4512329624125520"
+
     // MARK: - App identity (S14, L5)
 
     /// Must match `PRODUCT_BUNDLE_IDENTIFIER` in `project.yml` and the App Store

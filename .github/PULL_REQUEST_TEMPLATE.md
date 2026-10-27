@@ -59,3 +59,7 @@ decisión humana — revocar el certificado viejo en el portal de Apple Develope
 para que el job cree uno nuevo, o guardar el `.p12` como secret y añadir una
 ruta de reutilización. La capability de Sign in with Apple (S10) ya la activa
 el propio job, así que no hace falta tocar el portal a mano para eso.
+
+Los crashes Release solo se simbolizan en Sentry si existe el secret
+`SENTRY_AUTH_TOKEN` (token de organización de `acr-studio`). Sin él, el paso
+`Upload dSYMs to Sentry` avisa y se salta sin romper el job.

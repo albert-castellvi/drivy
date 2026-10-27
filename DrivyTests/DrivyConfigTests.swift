@@ -24,6 +24,24 @@ final class DrivyConfigTests: XCTestCase {
         XCTAssertEqual(key, key.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    // MARK: - Sentry DSN (S2)
+
+    /// A DSN is public by design (like the publishable key above): it is
+    /// committed and pinned here so a bad paste cannot silently disable crash
+    /// reporting in the app.
+    func testSentryDSNPointsAtTheDrivyProject() {
+        let dsnString = DrivyConfig.sentryDSN
+        let dsn = URL(string: dsnString)
+
+        XCTAssertNotNil(dsn, "not a valid URL: \(dsnString)")
+        XCTAssertEqual(dsn?.scheme, "https")
+        XCTAssertEqual(dsn?.user, "be603a3e9e3a1da9f84f3324c81aa0be")
+        XCTAssertEqual(dsn?.host, "o4512266155261952.ingest.de.sentry.io")
+        // Project id of `acr-studio/drivy`.
+        XCTAssertEqual(dsn?.lastPathComponent, "4512329624125520")
+        XCTAssertEqual(dsnString, dsnString.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     // MARK: - App identity (S14, L5)
 
     func testAppIdentityMatchesSpecS14() {
