@@ -20,10 +20,13 @@ final class AuthViewModel: ObservableObject {
 
     init(
         authService: AuthServicing = SupabaseAuthService(),
-        appleSignInProvider: AppleSignInProviding = AppleSignInCoordinator()
+        appleSignInProvider: AppleSignInProviding? = nil
     ) {
         self.authService = authService
-        self.appleSignInProvider = appleSignInProvider
+        // Default arguments are evaluated in a nonisolated context, and
+        // AppleSignInCoordinator is @MainActor (ASAuthorization delegate
+        // callbacks), so the real default is built here instead.
+        self.appleSignInProvider = appleSignInProvider ?? AppleSignInCoordinator()
     }
 
     var signedInUser: UserSummary? {
