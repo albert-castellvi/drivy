@@ -461,14 +461,14 @@ if [ -z "$CERT_RESOURCE_ID" ]; then
     || die "openssl could not build the CSR." "$(cat "$WORK/openssl-csr-error")"
 
   python3 - "$WORK/certificate-request.json" "$WORK/csr.pem" DISTRIBUTION <<'PY'
-  import json, sys
-  csr = open(sys.argv[2]).read()
-  json.dump(
-      {"data": {"type": "certificates", "attributes": {
-          "certificateType": sys.argv[3], "csrContent": csr}}},
-      open(sys.argv[1], "w"),
-  )
-  PY
+import json, sys
+csr = open(sys.argv[2]).read()
+json.dump(
+    {"data": {"type": "certificates", "attributes": {
+        "certificateType": sys.argv[3], "csrContent": csr}}},
+    open(sys.argv[1], "w"),
+)
+PY
 
   # `DISTRIBUTION` is the current name of the "Apple Distribution" type; some
   # accounts still answer 400 for it and only accept the legacy `IOS_DISTRIBUTION`
@@ -478,14 +478,14 @@ if [ -z "$CERT_RESOURCE_ID" ]; then
   if [ "$API_STATUS" = "400" ]; then
     warn "App Store Connect rejected certificateType DISTRIBUTION (HTTP 400); retrying with the legacy IOS_DISTRIBUTION type."
     python3 - "$WORK/certificate-request.json" "$WORK/csr.pem" IOS_DISTRIBUTION <<'PY'
-  import json, sys
-  csr = open(sys.argv[2]).read()
-  json.dump(
-      {"data": {"type": "certificates", "attributes": {
-          "certificateType": sys.argv[3], "csrContent": csr}}},
-      open(sys.argv[1], "w"),
-  )
-  PY
+import json, sys
+csr = open(sys.argv[2]).read()
+json.dump(
+    {"data": {"type": "certificates", "attributes": {
+        "certificateType": sys.argv[3], "csrContent": csr}}},
+    open(sys.argv[1], "w"),
+)
+PY
     api_call POST /v1/certificates "$WORK/certificate-request.json"
   fi
   case "$API_STATUS" in
