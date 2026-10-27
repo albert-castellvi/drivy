@@ -48,10 +48,10 @@
 #   PROFILE_NAME            read by the archive/export steps (profile specifier)
 #   SIGNING_KEYCHAIN_PATH   read by the keychain cleanup step
 #
-# Known limitation, by design of this task: the certificate private key only
-# exists for the duration of the run, so a *pre-existing* distribution
-# certificate cannot be reused and the script stops with an explicit error
-# (see `existing certificate` below) instead of revoking anything.
+# A pre-existing distribution certificate is reused only when its private key
+# is already in a searched keychain (the workflow imports it with
+# the DIST_CERTIFICATE_P12_BASE64 secret). Otherwise the script stops with an explicit
+# error (see `existing certificate` below) instead of revoking anything.
 
 set -euo pipefail
 
@@ -399,7 +399,7 @@ case "$API_STATUS" in
   *) die "GET /v1/certificates failed (HTTP $API_STATUS)." "$(response_snippet)" ;;
 esac
 
-existing_certs="$(json_rows "$API_BODY" id attributes.certificateType attributes.displayName attributes.expirationDate \
+existing_certs="$(json_rows "$API_BODY" id attributes.certificateType attributes.displayName attributes.expirationDate attributes.certificateContent \
   | awk -F'\t' '$2 == "DISTRIBUTION" || $2 == "IOS_DISTRIBUTION"')"
 
 if [ -z "$existing_certs" ]; then
@@ -409,163 +409,183 @@ if [ -z "$existing_certs" ]; then
   # enough to be sure before creating anything.
   api_call GET "/v1/certificates?limit=200"
   if [ "$API_STATUS" = "200" ]; then
-    existing_certs="$(json_rows "$API_BODY" id attributes.certificateType attributes.displayName attributes.expirationDate \
+    existing_certs="$(json_rows "$API_BODY" id attributes.certificateType attributes.displayName attributes.expirationDate attributes.certificateContent \
       | awk -F'\t' '$2 == "DISTRIBUTION" || $2 == "IOS_DISTRIBUTION"')"
   fi
 fi
 
-if [ -n "$existing_certs" ]; then
-  first_cert="$(printf '%s\n' "$existing_certs" | sed -n '1p')"
-  cert_id="$(printf '%s' "$first_cert" | cut -f1)"
-  cert_type="$(printf '%s' "$first_cert" | cut -f2)"
-  cert_name="$(printf '%s' "$first_cert" | cut -f3)"
-  cert_expiry="$(printf '%s' "$first_cert" | cut -f4)"
-  die "Team $TEAM_ID already has an Apple Distribution certificate (id $cert_id, type $cert_type, name '${cert_name:-?}', expires ${cert_expiry:-?}), but this job cannot sign with it: its private key only ever existed on an earlier ephemeral runner, and this script generated a new key pair that does not match it." \
-      "" \
-      "Nothing was revoked or changed (revoking a certificate without explicit human approval is not acceptable)." \
-      "To continue, pick one of these:" \
-      "  1. Revoke/delete that certificate in the Apple Developer portal (Certificates, Identifiers & Profiles -> Certificates) and re-run this job: it will create a fresh distribution certificate together with its private key." \
-      "  2. Persist the existing certificate plus its private key as a .p12 repository secret and add a fast path that imports it instead of creating one (needs approval: it adds a fourth secret)." \
-      "" \
-      "Other distribution certificates in the team: $(printf '%s\n' "$existing_certs" | cut -f1 | tr '\n' ' ')"
+# A distribution certificate whose private key is already in a searched keychain
+# is reused as is: the workflow imports the team's shared identity from the
+# DIST_CERTIFICATE_P12_BASE64 secret (same .p12 as ProofMate) before this script.
+# Matching is by SHA-1 of the DER certificate, which is what find-identity lists.
+signing_identities="$(security find-identity -v -p codesigning 2>/dev/null | awk '{print $2}')"
+if [ -n "$existing_certs" ] && [ -n "$signing_identities" ]; then
+  while IFS=$'\t' read -r id _type _name expiry content; do
+    sha1="$(printf '%s' "$content" | openssl base64 -d -A | openssl sha1 | awk '{print toupper($NF)}')"
+    if printf '%s\n' "$signing_identities" | grep -qx "$sha1"; then
+      CERT_RESOURCE_ID="$id"
+      cert_expiry="$expiry"
+      KEYCHAIN="${IMPORTED_KEYCHAIN_PATH:-$KEYCHAIN}"
+      info "Reusing Apple Distribution certificate $CERT_RESOURCE_ID (expires ${cert_expiry:-unknown}); its private key is already in the keychain."
+      break
+    fi
+  done <<<"$existing_certs"
 fi
 
-info "No distribution certificate yet; generating a fresh EC P-256 key and CSR..."
-# Apple requires an EC P-256 key; the key and the .p12 stay inside $WORK, which
-# exists only for this run.
-openssl ecparam -name prime256v1 -genkey -noout -out "$WORK/csr-key.pem" 2>"$WORK/openssl-ec-error" \
-  || die "openssl could not generate the EC P-256 private key." "$(cat "$WORK/openssl-ec-error")"
-chmod 600 "$WORK/csr-key.pem"
-openssl req -new -sha256 -key "$WORK/csr-key.pem" \
-  -subj "/CN=${APP_NAME} CI Distribution/O=ACRStudio/C=ES" \
-  -out "$WORK/csr.pem" 2>"$WORK/openssl-csr-error" \
-  || die "openssl could not build the CSR." "$(cat "$WORK/openssl-csr-error")"
-
-python3 - "$WORK/certificate-request.json" "$WORK/csr.pem" DISTRIBUTION <<'PY'
-import json, sys
-csr = open(sys.argv[2]).read()
-json.dump(
-    {"data": {"type": "certificates", "attributes": {
-        "certificateType": sys.argv[3], "csrContent": csr}}},
-    open(sys.argv[1], "w"),
-)
-PY
-
-# `DISTRIBUTION` is the current name of the "Apple Distribution" type; some
-# accounts still answer 400 for it and only accept the legacy `IOS_DISTRIBUTION`
-# spelling. Retrying is safe: a 400 means nothing was created.
-info "POST /v1/certificates (certificateType DISTRIBUTION)..."
-api_call POST /v1/certificates "$WORK/certificate-request.json"
-if [ "$API_STATUS" = "400" ]; then
-  warn "App Store Connect rejected certificateType DISTRIBUTION (HTTP 400); retrying with the legacy IOS_DISTRIBUTION type."
-  python3 - "$WORK/certificate-request.json" "$WORK/csr.pem" IOS_DISTRIBUTION <<'PY'
-import json, sys
-csr = open(sys.argv[2]).read()
-json.dump(
-    {"data": {"type": "certificates", "attributes": {
-        "certificateType": sys.argv[3], "csrContent": csr}}},
-    open(sys.argv[1], "w"),
-)
-PY
-  api_call POST /v1/certificates "$WORK/certificate-request.json"
-fi
-case "$API_STATUS" in
-  200|201) ;;
-  409)
-    die "POST /v1/certificates returned 409 Conflict: the team's distribution certificate limit is probably reached." \
-        "Apple caps distribution certificates per team, and each one this pipeline creates is unusable for the next run (the private key is discarded with the runner)." \
-        "Revoke an old certificate in the developer portal (explicit human decision) and re-run." \
-        "$(response_snippet)"
-    ;;
-  403)
-    die "The API key is not allowed to create certificates (HTTP 403). It needs the App Manager or Admin role." \
-        "$(response_snippet)"
-    ;;
-  *)
-    die "POST /v1/certificates failed (HTTP $API_STATUS)." "$(response_snippet)"
-    ;;
-esac
-
-CERT_RESOURCE_ID="$(json_path "$API_BODY" data.id)"
-cert_expiry="$(json_path "$API_BODY" data.attributes.expirationDate)"
-[ -n "$CERT_RESOURCE_ID" ] || die "POST /v1/certificates returned no resource id." "$(response_snippet)"
-json_path "$API_BODY" data.attributes.certificateContent >"$WORK/certificate.b64"
-[ -s "$WORK/certificate.b64" ] || die "POST /v1/certificates returned no certificateContent."
-b64decode "$WORK/certificate.b64" "$WORK/certificate.cer"
-openssl x509 -inform DER -in "$WORK/certificate.cer" -out "$WORK/certificate.pem" 2>"$WORK/openssl-x509-error" \
-  || die "The downloaded certificate is not valid DER X.509." "$(cat "$WORK/openssl-x509-error")"
-info "Created Apple Distribution certificate $CERT_RESOURCE_ID (expires ${cert_expiry:-unknown})."
-
-# .p12 with a random export password; the password goes through a 0600 file, not
-# through the command line, and is never printed.
-openssl rand -hex 24 >"$WORK/p12.pass"
-chmod 600 "$WORK/p12.pass"
-openssl pkcs12 -export \
-  -inkey "$WORK/csr-key.pem" \
-  -in "$WORK/certificate.pem" \
-  -out "$WORK/signing.p12" \
-  -name "$PROFILE_NAME" \
-  -passout "file:$WORK/p12.pass" 2>"$WORK/openssl-pkcs12-error" \
-  || die "openssl could not export the .p12." "$(cat "$WORK/openssl-pkcs12-error")"
-chmod 600 "$WORK/signing.p12"
-
-# --- 2b. Import into a throwaway job keychain ------------------------------
-
-info "Importing the identity into a temporary keychain..."
-openssl rand -hex 24 >"$WORK/keychain.pass"
-chmod 600 "$WORK/keychain.pass"
-KEYCHAIN_PASS="$(cat "$WORK/keychain.pass")"
-P12_PASS="$(cat "$WORK/p12.pass")"
-
-security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
-security set-keychain-settings -lut 21600 "$KEYCHAIN"
-security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
-
-# codesign needs the issuing WWDR intermediate to validate the chain. Xcode's
-# install normally leaves it in the System keychain; import it when it is not
-# there so the identity is usable even on a bare image.
-if ! security find-certificate -c "Apple Worldwide Developer Relations" >/dev/null 2>&1; then
-  if curl -sS -o "$WORK/wwdr.cer" -L https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer; then
-    security import "$WORK/wwdr.cer" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1 \
-      && info "Imported the Apple WWDR G3 intermediate into the job keychain." \
-      || warn "Could not import the Apple WWDR G3 intermediate; relying on the System keychain."
-  else
-    warn "Could not download the Apple WWDR G3 intermediate; relying on the System keychain."
+if [ -z "$CERT_RESOURCE_ID" ]; then
+  if [ -n "$existing_certs" ]; then
+    first_cert="$(printf '%s\n' "$existing_certs" | sed -n '1p')"
+    cert_id="$(printf '%s' "$first_cert" | cut -f1)"
+    cert_type="$(printf '%s' "$first_cert" | cut -f2)"
+    cert_name="$(printf '%s' "$first_cert" | cut -f3)"
+    cert_expiry="$(printf '%s' "$first_cert" | cut -f4)"
+    die "Team $TEAM_ID already has an Apple Distribution certificate (id $cert_id, type $cert_type, name '${cert_name:-?}', expires ${cert_expiry:-?}), but none of the team's distribution certificates has its private key in a keychain on this runner." \
+        "" \
+        "Nothing was revoked or changed (revoking a certificate without explicit human approval is not acceptable)." \
+        "To continue, pick one of these:" \
+        "  1. Revoke/delete that certificate in the Apple Developer portal (Certificates, Identifiers & Profiles -> Certificates) and re-run this job: it will create a fresh distribution certificate together with its private key." \
+        "  2. Check the DIST_CERTIFICATE_P12_BASE64 / DIST_CERTIFICATE_PASSWORD secrets: the 'Import distribution identity (.p12)' step must import one of the certificates above before this script runs." \
+        "" \
+        "Other distribution certificates in the team: $(printf '%s\n' "$existing_certs" | cut -f1 | tr '\n' ' ')"
   fi
-else
-  info "Apple WWDR intermediate already present in a searched keychain."
+
+  info "No distribution certificate yet; generating a fresh EC P-256 key and CSR..."
+  # Apple requires an EC P-256 key; the key and the .p12 stay inside $WORK, which
+  # exists only for this run.
+  openssl ecparam -name prime256v1 -genkey -noout -out "$WORK/csr-key.pem" 2>"$WORK/openssl-ec-error" \
+    || die "openssl could not generate the EC P-256 private key." "$(cat "$WORK/openssl-ec-error")"
+  chmod 600 "$WORK/csr-key.pem"
+  openssl req -new -sha256 -key "$WORK/csr-key.pem" \
+    -subj "/CN=${APP_NAME} CI Distribution/O=ACRStudio/C=ES" \
+    -out "$WORK/csr.pem" 2>"$WORK/openssl-csr-error" \
+    || die "openssl could not build the CSR." "$(cat "$WORK/openssl-csr-error")"
+
+  python3 - "$WORK/certificate-request.json" "$WORK/csr.pem" DISTRIBUTION <<'PY'
+  import json, sys
+  csr = open(sys.argv[2]).read()
+  json.dump(
+      {"data": {"type": "certificates", "attributes": {
+          "certificateType": sys.argv[3], "csrContent": csr}}},
+      open(sys.argv[1], "w"),
+  )
+  PY
+
+  # `DISTRIBUTION` is the current name of the "Apple Distribution" type; some
+  # accounts still answer 400 for it and only accept the legacy `IOS_DISTRIBUTION`
+  # spelling. Retrying is safe: a 400 means nothing was created.
+  info "POST /v1/certificates (certificateType DISTRIBUTION)..."
+  api_call POST /v1/certificates "$WORK/certificate-request.json"
+  if [ "$API_STATUS" = "400" ]; then
+    warn "App Store Connect rejected certificateType DISTRIBUTION (HTTP 400); retrying with the legacy IOS_DISTRIBUTION type."
+    python3 - "$WORK/certificate-request.json" "$WORK/csr.pem" IOS_DISTRIBUTION <<'PY'
+  import json, sys
+  csr = open(sys.argv[2]).read()
+  json.dump(
+      {"data": {"type": "certificates", "attributes": {
+          "certificateType": sys.argv[3], "csrContent": csr}}},
+      open(sys.argv[1], "w"),
+  )
+  PY
+    api_call POST /v1/certificates "$WORK/certificate-request.json"
+  fi
+  case "$API_STATUS" in
+    200|201) ;;
+    409)
+      die "POST /v1/certificates returned 409 Conflict: the team's distribution certificate limit is probably reached." \
+          "Apple caps distribution certificates per team, and each one this pipeline creates is unusable for the next run (the private key is discarded with the runner)." \
+          "Revoke an old certificate in the developer portal (explicit human decision) and re-run." \
+          "$(response_snippet)"
+      ;;
+    403)
+      die "The API key is not allowed to create certificates (HTTP 403). It needs the App Manager or Admin role." \
+          "$(response_snippet)"
+      ;;
+    *)
+      die "POST /v1/certificates failed (HTTP $API_STATUS)." "$(response_snippet)"
+      ;;
+  esac
+
+  CERT_RESOURCE_ID="$(json_path "$API_BODY" data.id)"
+  cert_expiry="$(json_path "$API_BODY" data.attributes.expirationDate)"
+  [ -n "$CERT_RESOURCE_ID" ] || die "POST /v1/certificates returned no resource id." "$(response_snippet)"
+  json_path "$API_BODY" data.attributes.certificateContent >"$WORK/certificate.b64"
+  [ -s "$WORK/certificate.b64" ] || die "POST /v1/certificates returned no certificateContent."
+  b64decode "$WORK/certificate.b64" "$WORK/certificate.cer"
+  openssl x509 -inform DER -in "$WORK/certificate.cer" -out "$WORK/certificate.pem" 2>"$WORK/openssl-x509-error" \
+    || die "The downloaded certificate is not valid DER X.509." "$(cat "$WORK/openssl-x509-error")"
+  info "Created Apple Distribution certificate $CERT_RESOURCE_ID (expires ${cert_expiry:-unknown})."
+
+  # .p12 with a random export password; the password goes through a 0600 file, not
+  # through the command line, and is never printed.
+  openssl rand -hex 24 >"$WORK/p12.pass"
+  chmod 600 "$WORK/p12.pass"
+  openssl pkcs12 -export \
+    -inkey "$WORK/csr-key.pem" \
+    -in "$WORK/certificate.pem" \
+    -out "$WORK/signing.p12" \
+    -name "$PROFILE_NAME" \
+    -passout "file:$WORK/p12.pass" 2>"$WORK/openssl-pkcs12-error" \
+    || die "openssl could not export the .p12." "$(cat "$WORK/openssl-pkcs12-error")"
+  chmod 600 "$WORK/signing.p12"
+
+  # --- 2b. Import into a throwaway job keychain ------------------------------
+
+  info "Importing the identity into a temporary keychain..."
+  openssl rand -hex 24 >"$WORK/keychain.pass"
+  chmod 600 "$WORK/keychain.pass"
+  KEYCHAIN_PASS="$(cat "$WORK/keychain.pass")"
+  P12_PASS="$(cat "$WORK/p12.pass")"
+
+  security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+  security set-keychain-settings -lut 21600 "$KEYCHAIN"
+  security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
+
+  # codesign needs the issuing WWDR intermediate to validate the chain. Xcode's
+  # install normally leaves it in the System keychain; import it when it is not
+  # there so the identity is usable even on a bare image.
+  if ! security find-certificate -c "Apple Worldwide Developer Relations" >/dev/null 2>&1; then
+    if curl -sS -o "$WORK/wwdr.cer" -L https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer; then
+      security import "$WORK/wwdr.cer" -k "$KEYCHAIN" -T /usr/bin/codesign >/dev/null 2>&1 \
+        && info "Imported the Apple WWDR G3 intermediate into the job keychain." \
+        || warn "Could not import the Apple WWDR G3 intermediate; relying on the System keychain."
+    else
+      warn "Could not download the Apple WWDR G3 intermediate; relying on the System keychain."
+    fi
+  else
+    info "Apple WWDR intermediate already present in a searched keychain."
+  fi
+
+  # The .p12 is the primary path. LibreSSL's PBES2/AES dialect is accepted by
+  # recent macOS, but if the Security framework ever refuses it, the same identity
+  # is imported from PEM (certificate + PKCS#8 key) instead of failing the job.
+  if security import "$WORK/signing.p12" -k "$KEYCHAIN" -f pkcs12 -P "$P12_PASS" \
+    -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild; then
+    info "Imported the .p12 identity into the job keychain."
+  else
+    warn "security import rejected the .p12 (LibreSSL/Keychain dialect); importing the PEM certificate and PKCS#8 key instead."
+    openssl pkcs8 -topk8 -nocrypt -in "$WORK/csr-key.pem" -out "$WORK/csr-key-pkcs8.pem" \
+      || die "openssl could not convert the CSR key to PKCS#8 for the keychain fallback."
+    security import "$WORK/certificate.pem" -k "$KEYCHAIN" -T /usr/bin/codesign \
+      || die "security import rejected the distribution certificate PEM."
+    security import "$WORK/csr-key-pkcs8.pem" -k "$KEYCHAIN" \
+      -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild \
+      || die "security import rejected the PKCS#8 private key PEM."
+    info "Imported the identity from PEM into the job keychain."
+  fi
+  # Without the partition list codesign cannot use the private key non-interactively.
+  security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN" >/dev/null 2>&1 \
+    || die "security set-key-partition-list failed on the job keychain."
+
+  # Put the job keychain first in the user search list, keeping the existing ones.
+  existing_keychains="$(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$//')"
+  # shellcheck disable=SC2086 # deliberate word splitting: one argument per keychain
+  security list-keychains -d user -s "$KEYCHAIN" $existing_keychains
+
+  security find-identity -v -p codesigning "$KEYCHAIN" | grep -q 'Apple Distribution' \
+    || die "The Apple Distribution identity is not usable in the job keychain." \
+           "security find-identity output: $(security find-identity -v -p codesigning "$KEYCHAIN")"
+  info "Codesigning identity available: Apple Distribution."
 fi
-
-# The .p12 is the primary path. LibreSSL's PBES2/AES dialect is accepted by
-# recent macOS, but if the Security framework ever refuses it, the same identity
-# is imported from PEM (certificate + PKCS#8 key) instead of failing the job.
-if security import "$WORK/signing.p12" -k "$KEYCHAIN" -f pkcs12 -P "$P12_PASS" \
-  -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild; then
-  info "Imported the .p12 identity into the job keychain."
-else
-  warn "security import rejected the .p12 (LibreSSL/Keychain dialect); importing the PEM certificate and PKCS#8 key instead."
-  openssl pkcs8 -topk8 -nocrypt -in "$WORK/csr-key.pem" -out "$WORK/csr-key-pkcs8.pem" \
-    || die "openssl could not convert the CSR key to PKCS#8 for the keychain fallback."
-  security import "$WORK/certificate.pem" -k "$KEYCHAIN" -T /usr/bin/codesign \
-    || die "security import rejected the distribution certificate PEM."
-  security import "$WORK/csr-key-pkcs8.pem" -k "$KEYCHAIN" \
-    -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild \
-    || die "security import rejected the PKCS#8 private key PEM."
-  info "Imported the identity from PEM into the job keychain."
-fi
-# Without the partition list codesign cannot use the private key non-interactively.
-security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN" >/dev/null 2>&1 \
-  || die "security set-key-partition-list failed on the job keychain."
-
-# Put the job keychain first in the user search list, keeping the existing ones.
-existing_keychains="$(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$//')"
-# shellcheck disable=SC2086 # deliberate word splitting: one argument per keychain
-security list-keychains -d user -s "$KEYCHAIN" $existing_keychains
-
-security find-identity -v -p codesigning "$KEYCHAIN" | grep -q 'Apple Distribution' \
-  || die "The Apple Distribution identity is not usable in the job keychain." \
-         "security find-identity output: $(security find-identity -v -p codesigning "$KEYCHAIN")"
-info "Codesigning identity available: Apple Distribution."
 
 # --- 3. App Store provisioning profile -------------------------------------
 

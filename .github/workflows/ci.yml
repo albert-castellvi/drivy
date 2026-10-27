@@ -315,6 +315,32 @@ jobs:
             exit 1
           fi
 
+      # Imports the team's existing Apple Distribution identity (H69DS6A3KZ,
+      # the same .p12 ProofMate signs with) into a temporary keychain. The
+      # provisioning script below finds its private key there and reuses the
+      # certificate instead of trying to create a new one.
+      - name: Import distribution identity (.p12)
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          CERT_P12_BASE64: ${{ secrets.DIST_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.DIST_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/dist-signing.keychain-db"
+          keychain_pass="$(openssl rand -hex 24)"
+          printf '%s' "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$keychain_pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_pass" "$keychain"
+          security import "$RUNNER_TEMP/dist.p12" -P "$CERT_PASSWORD" -f pkcs12 -k "$keychain" \
+            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild
+          rm -f "$RUNNER_TEMP/dist.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_pass" "$keychain" >/dev/null
+          existing="$(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$//')"
+          # shellcheck disable=SC2086 # one argument per keychain
+          security list-keychains -d user -s "$keychain" $existing
+          echo "IMPORTED_KEYCHAIN_PATH=$keychain" >> "$GITHUB_ENV"
+
       # Creates the Apple Distribution certificate (with its private key) and
       # the App Store provisioning profile through the App Store Connect API,
       # installs them on the runner, and exports PROFILE_NAME (read by the
@@ -440,11 +466,13 @@ jobs:
         if: always() && steps.signing.outputs.signed == 'true'
         run: |
           set -o pipefail
-          keychain="${SIGNING_KEYCHAIN_PATH:-$RUNNER_TEMP/drivy-signing/Drivy-signing.keychain-db}"
-          if [ -f "$keychain" ]; then
-            security delete-keychain "$keychain" || true
-            echo "Deleted temporary signing keychain."
-          fi
+          for keychain in "${SIGNING_KEYCHAIN_PATH:-$RUNNER_TEMP/drivy-signing/Drivy-signing.keychain-db}" \
+                          "$RUNNER_TEMP/dist-signing.keychain-db"; do
+            if [ -f "$keychain" ]; then
+              security delete-keychain "$keychain" || true
+              echo "Deleted temporary signing keychain $(basename "$keychain")."
+            fi
+          done
           profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
           if [ -d "$profiles_dir" ]; then
             ls -1 "$profiles_dir"
