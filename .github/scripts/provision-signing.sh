@@ -360,17 +360,9 @@ fi
 # --- 1b. Sign in with Apple capability -------------------------------------
 
 info "Ensuring the Sign in with Apple capability is enabled on the App ID..."
-api_call GET "/v1/bundleIdCapabilities?filter%5BbundleId%5D=${BUNDLE_RESOURCE_ID}"
-case "$API_STATUS" in
-  200) ;;
-  *) die "GET /v1/bundleIds/${BUNDLE_RESOURCE_ID}/bundleIdCapabilities failed (HTTP $API_STATUS)." \
-         "$(response_snippet)" ;;
-esac
-
-if json_rows "$API_BODY" attributes.capabilityType | grep -qx 'SIGN_IN_WITH_APPLE'; then
-  info "SIGN_IN_WITH_APPLE is already enabled."
-else
-  python3 - "$WORK/capability-request.json" "$BUNDLE_RESOURCE_ID" <<'PY'
+# No GET pre-check: the capabilities collection endpoint is forbidden to some
+# API-key roles; POST reports 409 when it is already enabled.
+python3 - "$WORK/capability-request.json" "$BUNDLE_RESOURCE_ID" <<'PY'
 import json, sys
 json.dump(
     {"data": {
@@ -381,17 +373,22 @@ json.dump(
     open(sys.argv[1], "w"),
 )
 PY
-  api_call POST /v1/bundleIdCapabilities "$WORK/capability-request.json"
-  case "$API_STATUS" in
-    200|201) info "SIGN_IN_WITH_APPLE enabled (this removes the manual portal step from S10)." ;;
-    409) info "SIGN_IN_WITH_APPLE was already enabled (HTTP 409 Conflict); continuing." ;;
-    *)
-      die "POST /v1/bundleIdCapabilities failed (HTTP $API_STATUS)." \
-          "The App ID must carry Sign in with Apple: the app's entitlements require it (S10/L7), so the archive would fail without it." \
-          "$(response_snippet)"
-      ;;
-  esac
-fi
+api_call POST /v1/bundleIdCapabilities "$WORK/capability-request.json"
+case "$API_STATUS" in
+  200|201) info "SIGN_IN_WITH_APPLE enabled (this removes the manual portal step from S10)." ;;
+  409) info "SIGN_IN_WITH_APPLE was already enabled (HTTP 409 Conflict); continuing." ;;
+  403)
+    die "POST /v1/bundleIdCapabilities failed (HTTP 403 Forbidden)." \
+        "The API key role cannot manage capabilities. Either raise the key to Admin in App Store Connect (Users and Access -> Integrations) or enable Sign in with Apple manually on App ID com.acrstudio.drivy in Certificates, Identifiers & Profiles." \
+        "The app's entitlements require it (S10/L7), so the archive would fail without it." \
+        "$(response_snippet)"
+    ;;
+  *)
+    die "POST /v1/bundleIdCapabilities failed (HTTP $API_STATUS)." \
+        "The App ID must carry Sign in with Apple: the app's entitlements require it (S10/L7), so the archive would fail without it." \
+        "$(response_snippet)"
+    ;;
+esac
 
 # --- 2. Distribution certificate -------------------------------------------
 
