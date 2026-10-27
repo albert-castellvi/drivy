@@ -109,7 +109,11 @@ final class FreemiumService: ObservableObject {
         let updates = store.entitlementUpdates()
         updateTask = Task { [weak self] in
             for await entitlements in updates {
-                guard let self else { return }
+                // Cancellation is cooperative: an element buffered before the
+                // task started (or before stop) can still be delivered by
+                // next(), so every element is re-checked against the flag
+                // before it may touch the plan.
+                guard let self, !Task.isCancelled else { return }
                 self.apply(entitlements)
             }
         }
