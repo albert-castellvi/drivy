@@ -51,7 +51,7 @@ final class ShareCardViewModel: ObservableObject {
                 streakDays: snapshot.streak.days,
                 leaguePosition: position?.rank,
                 leagueName: position?.leagueName,
-                leagueSize: position?.size
+                leagueSize: position?.size ?? 0
             )
         } catch {
             errorMessage = Self.loadFailureMessage
