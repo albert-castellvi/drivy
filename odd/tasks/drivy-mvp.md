@@ -60,9 +60,9 @@ GitHub Actions (runner macOS).
 - **T1** (S10) ✅ DONE — Migraciones Supabase: tablas `profiles`, `drives`,
   `daily_scores`, `leagues`, `league_members`, RLS y función de ranking
   semanal. Route: delegado. Commit: `feat(backend): supabase schema v1`.
-- **T2** (S3, S11) Proyecto Xcode + shell SwiftUI (tab root: Hoy / Ligas /
-  Ajustes), Sign in with Apple, cliente Supabase. Route: delegado. Commit:
-  `feat(app): xcode project and auth shell`.
+- **T2** (S3, S11) ✅ DONE — Proyecto Xcode + shell SwiftUI (tab root: Hoy /
+  Ligas / Ajustes), Sign in with Apple, cliente Supabase. Route: delegado.
+  Commit: `feat(app): xcode project and auth shell`.
 - **T3** (S4, S5, S10, S13) Tracking de trayecto (CLLocation +
   CMMotionManager), detección de conducción conectada (AVAudioSession route
   changes) y motor de scoring v1 como módulo testeable puro (inyección de
@@ -107,3 +107,12 @@ GitHub Actions (runner macOS).
   `drivy_function_hardening` (search_path fijado, `handle_new_user` no
   ejecutable vía RPC). Advisors: solo quedan los 2 avisos intencionales de
   los RPC de app. URL API: https://thsqgdaadhnnwsadjhrj.supabase.co.
+- **L7** T2 ejecutado por worker (gentle-ai-worker). 26 ficheros Swift +
+  `project.yml` (XcodeGen, se genera en CI) + `.gitignore`. Tests: 20
+  (config/identidad S14, máquina de estados auth, nonce Apple). Riesgos
+  documentados pendientes de CI (T6/T7): excludes de XcodeGen sin probar en
+  mac (fallback: subdirectorios explícitos), símbolos supabase-swift v2 sin
+  compilar, capability Sign in with Apple también en el App ID del portal,
+  `xcodegen generate` nunca ejecutado localmente. Verificación structural
+  (YAML/plist parse, balance lint) OK. Veredictos: S3 ✓, S11 parcial (la
+  parte de proyecto; el workflow es T6), S14 ✓.
