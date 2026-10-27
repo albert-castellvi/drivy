@@ -15,6 +15,10 @@ import Foundation
 /// L11: it also keeps the coordinates of the drive (`routeCoordinates`), which is
 /// the only thing that can feed the map of the drive detail: the samples are never
 /// uploaded (S10), so the route only exists on the device that recorded it.
+///
+/// S2: when the drive stops, the route is handed to the engine so the finished
+/// summary carries where each counted event happened. Those events stay on the
+/// phone exactly like the route (S10, S12).
 @MainActor
 final class DriveRecorder: ObservableObject {
 
@@ -125,6 +129,9 @@ final class DriveRecorder: ObservableObject {
         locationSampler.start()
         motionSampler.start()
         connectedModeDetector.start()
+
+        // S7: no reminder may buzz while the drive is in progress.
+        DriveNotifications.driveDidStart()
     }
 
     func stop() async {
@@ -142,12 +149,23 @@ final class DriveRecorder: ObservableObject {
         samples.phoneUseEvents = phoneUseEvents
         samples.connectedMode = connectedMode
 
-        guard let startedAt, let driveScore = engine.score(samples) else {
+        // S2: the route of this device is what locates the events of the finished
+        // summary. `DriveCoordinate` keeps CoreLocation out of the pure engine.
+        let scoringRoute = routeCoordinates.map {
+            DriveCoordinate(latitude: $0.latitude, longitude: $0.longitude)
+        }
+
+        guard let startedAt, let driveScore = engine.score(samples, route: scoringRoute) else {
             // No usable fix: nothing to score and nothing to upload.
             finishSession(keepingSummary: false)
+            // A drive with no fix still ends the "do not disturb" state of S7, or
+            // the daily reminder would stay cancelled for good.
+            DriveNotifications.driveDidEnd()
             return
         }
 
+        // The route travels with the samples (L11), so the events of the summary
+        // arrive already positioned (S2).
         let record = DriveRecord(score: driveScore, startedAt: startedAt)
         lastCompletedDrive = record
         distanceKm = driveScore.distanceKm
@@ -156,6 +174,9 @@ final class DriveRecorder: ObservableObject {
         // The session ends before the network call, so a slow or failed upload
         // can never leave the UI in a half-recorded state.
         finishSession(keepingSummary: true)
+
+        // S7: the reminder is reprogrammed once the drive is over.
+        DriveNotifications.driveDidEnd()
 
         isSaving = true
         do {
