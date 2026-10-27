@@ -360,7 +360,7 @@ fi
 # --- 1b. Sign in with Apple capability -------------------------------------
 
 info "Ensuring the Sign in with Apple capability is enabled on the App ID..."
-api_call GET "/v1/bundleIds/${BUNDLE_RESOURCE_ID}/bundleIdCapabilities?limit=200"
+api_call GET "/v1/bundleIdCapabilities?filter%5BbundleId%5D=${BUNDLE_RESOURCE_ID}"
 case "$API_STATUS" in
   200) ;;
   *) die "GET /v1/bundleIds/${BUNDLE_RESOURCE_ID}/bundleIdCapabilities failed (HTTP $API_STATUS)." \
