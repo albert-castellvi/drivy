@@ -76,8 +76,8 @@ GitHub Actions (runner macOS).
 - **T6** (S11) ✅ DONE (parcial por diseño) — Workflow GitHub Actions: PR
   (tests) y main (release build sin firmar). Route: delegado. Commit:
   `feat(ci): macos build and test pipeline`.
-- **T7** Verificación final: suite completa en CI, veredicto por S#.
-  Route: QA delegado. Commit: — (evidencia en este Log).
+- **T7** ✅ DONE — Verificación final: suite completa en CI, veredicto
+  por S#. Evidencia en L14.
 
 ## Log
 
@@ -171,3 +171,17 @@ GitHub Actions (runner macOS).
   YAML parse + bash -n (10/10) + lógica del assert probada positiva y
   negativa; nunca ejecutado. Veredicto S11: parcial (PR tests ✓ real,
   archive firmado pendiente de secrets).
+- **L14** T7 verificación final vía CI (GitHub Actions, macos-15, Xcode
+  16.4, simulador iPhone 16, run 40523089024, PR #5): **Executed 301
+  tests, with 0 failures**. Ciclo de fix hasta verde: a0d028f (MainActor
+  init en default arg), 029717b (opcional share card), f1f4015
+  (AsyncStream entregaba elemento bufferizado a listener cancelado).
+  Veredicto por S#: S1 ✓ concepto, S2 ✓ CI, S3 ✓ nativo, S4 ✓ tracking,
+  S5 ✓ scoring, S6 ✓ diario/racha, S7 ✓ ligas, S8 ✓ share card (QA
+  visual en dispositivo pendiente), S9 ✓ freemium (compra real pendiente
+  de StoreKit config/sandbox), S10 ✓ Supabase, S11 PARCIAL (PR tests ✓
+  real; archive firmado TestFlight pendiente de secrets ASC), S12 ✓
+  privacidad, S13 ✓ conducción conectada, S14 ✓ identidad. Pendiente
+  post-MVP: prueba en dispositivo real, StoreKit sandbox, capability en
+  portal Apple, TestFlight. MVP cerrado en código; merge de la cadena de
+  PRs: decisión del usuario.
