@@ -21,7 +21,7 @@
 #     APP_STORE_CONNECT_API_KEY_ID       key id of the ASC API key (10 chars)
 #     APP_STORE_CONNECT_API_ISSUER_ID    issuer id of that key (UUID)
 #     APP_STORE_CONNECT_API_KEY_BASE64   base64 of AuthKey_<KEYID>.p8
-#   The Apple Developer team id (128809494) is public and hardcoded in the job
+#   The Apple Developer team id (QP5A6D4Y4P) is public and hardcoded in the job
 #   env. Xcode 16.4 on macos-15 creates and fetches the Apple Distribution
 #   certificate and the App Store provisioning profile from the cloud, so no
 #   .p12 or .mobileprovision secret is needed: the API key authenticates
@@ -167,7 +167,7 @@ jobs:
     timeout-minutes: 60
     env:
       # Public Apple Developer team id (S14 / L5) — not a secret.
-      APPLE_TEAM_ID: "128809494"
+      APPLE_TEAM_ID: "QP5A6D4Y4P"
       # Repository secrets, surfaced as env vars only so the fallback guard can
       # test them with a shell `-n`: `secrets` is not available to `if:`.
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
