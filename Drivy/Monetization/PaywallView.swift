@@ -1,0 +1,148 @@
+import SwiftUI
+
+/// Paywall sheet of the premium subscription (S9).
+///
+/// Preview-friendly: the view takes its view model, so a `#Preview` or a UI test
+/// can wire it to a fake StoreKit provider instead of the live one. Screens do
+/// not build it directly: they go through `PaywallPresenter`.
+struct PaywallView: View {
+
+    @ObservedObject private var viewModel: PaywallViewModel
+    private let onClose: () -> Void
+
+    /// - Parameters:
+    ///   - viewModel: paywall state; `PaywallPresenter.makeViewModel()` in the
+    ///     app, `PaywallViewModel.preview()` in previews.
+    ///   - onClose: dismissal of the sheet ("Ahora no"). The presentation itself
+    ///     belongs to the caller.
+    init(viewModel: PaywallViewModel, onClose: @escaping () -> Void = {}) {
+        self.viewModel = viewModel
+        self.onClose = onClose
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    benefitsSection
+                    statusSection
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(24)
+            }
+            // S9/S12: the paywall never blocks the app, it is always dismissible.
+            .safeAreaInset(edge: .bottom) { actions }
+            .navigationTitle(PaywallCopy.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(PaywallCopy.dismissButtonTitle, action: onClose)
+                }
+            }
+        }
+        .task { await viewModel.loadPrice() }
+    }
+
+    // MARK: - Sections
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(PaywallCopy.subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Text(viewModel.priceText)
+                .font(.largeTitle.bold())
+        }
+    }
+
+    private var benefitsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(PaywallCopy.benefitsTitle)
+                .font(.headline)
+
+            ForEach(viewModel.benefits, id: \.self) { benefit in
+                Label(benefit, systemImage: "checkmark.circle.fill")
+                    .font(.body)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusSection: some View {
+        switch viewModel.status {
+        case .idle:
+            EmptyView()
+        case .loadingPrice:
+            statusLabel(PaywallCopy.loadingPriceMessage, showsSpinner: true)
+        case .purchasing:
+            statusLabel(PaywallCopy.purchasingMessage, showsSpinner: true)
+        case .restoring:
+            statusLabel(PaywallCopy.restoringMessage, showsSpinner: true)
+        case .purchased:
+            statusLabel(PaywallCopy.purchasedMessage, color: .green)
+        case .failed(let message):
+            statusLabel(message, color: .red)
+        }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        VStack(spacing: 12) {
+            if viewModel.plan == .premium {
+                Text(PaywallCopy.premiumActiveMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button {
+                    Task { await viewModel.purchase() }
+                } label: {
+                    Text(PaywallCopy.purchaseButtonTitle)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isBusy)
+            }
+
+            Button(PaywallCopy.restoreButtonTitle) {
+                Task { await viewModel.restore() }
+            }
+            .font(.footnote)
+            .disabled(viewModel.isBusy)
+        }
+        .padding()
+        .background(.bar)
+    }
+
+    // MARK: - Building blocks
+
+    private func statusLabel(
+        _ message: String,
+        showsSpinner: Bool = false,
+        color: Color = .secondary
+    ) -> some View {
+        HStack(spacing: 8) {
+            if showsSpinner {
+                ProgressView()
+            }
+
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+#if DEBUG
+// The preview fixtures live in `PaywallPreviewSupport.swift` (debug builds
+// only), so the previews are compiled only when that file is.
+#Preview("Paywall — plan Free") {
+    PaywallView(viewModel: .preview(plan: .free))
+}
+
+#Preview("Paywall — Premium") {
+    PaywallView(viewModel: .preview(plan: .premium))
+}
+#endif

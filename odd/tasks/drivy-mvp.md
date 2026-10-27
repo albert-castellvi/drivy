@@ -63,19 +63,21 @@ GitHub Actions (runner macOS).
 - **T2** (S3, S11) ✅ DONE — Proyecto Xcode + shell SwiftUI (tab root: Hoy /
   Ligas / Ajustes), Sign in with Apple, cliente Supabase. Route: delegado.
   Commit: `feat(app): xcode project and auth shell`.
-- **T3** (S4, S5, S10, S13) Tracking de trayecto (CLLocation +
+- **T3** (S4, S5, S10, S13) ✅ DONE — Tracking de trayecto (CLLocation +
   CMMotionManager), detección de conducción conectada (AVAudioSession route
   changes) y motor de scoring v1 como módulo testeable puro (inyección de
-  muestras). Route: delegado. Commit: `feat(app): drive tracking and scoring engine`.
-- **T4** (S6, S7, S8) Pantallas core: Hoy (score, racha), detalle de trayecto
-  con mapa, Ligas + invite, share card. Route: delegado. Commit:
+  muestras). Route: delegado. Commit: `feat(app): drive tracking and scoring
+  engine`.
+- **T4** (S6, S7, S8) ✅ DONE — Pantallas core: Hoy (score, racha), detalle
+  de trayecto con mapa, Ligas + invite, share card. Route: delegado. Commit:
   `feat(app): core screens and share card`.
-- **T5** (S9) Paywall StoreKit 2 y límites freemium. Route: delegado. Commit:
-  `feat(app): freemium paywall with storekit 2`.
-- **T6** (S11) Workflow GitHub Actions: PR (tests) y main (release build).
-  Route: delegado. Commit: `feat(ci): macos build and test pipeline`.
-- **T7** Verificación final: suite completa en CI, veredicto por S#.
-  Route: QA delegado. Commit: — (evidencia en este Log).
+- **T5** (S9) ✅ DONE — Paywall StoreKit 2 y límites freemium. Route:
+  delegado. Commit: `feat(app): freemium paywall with storekit 2`.
+- **T6** (S11) ✅ DONE (parcial por diseño) — Workflow GitHub Actions: PR
+  (tests) y main (release build sin firmar). Route: delegado. Commit:
+  `feat(ci): macos build and test pipeline`.
+- **T7** ✅ DONE — Verificación final: suite completa en CI, veredicto
+  por S#. Evidencia en L14.
 
 ## Log
 
@@ -116,3 +118,70 @@ GitHub Actions (runner macOS).
   `xcodegen generate` nunca ejecutado localmente. Verificación structural
   (YAML/plist parse, balance lint) OK. Veredictos: S3 ✓, S11 parcial (la
   parte de proyecto; el workflow es T6), S14 ✓.
+- **L8** Corte de slice PR (estrategia chained PR, rama > 400 líneas):
+  commit `3fcc8f8` = slice 1 «backend schema v1 + app shell/auth».
+  Slices siguientes: slice 2 = T3 (tracking/scoring), slice 3 = T4+T5
+  (pantallas core + paywall), slice 4 = T6 (CI). PRs apilados sobre
+  `main` al cerrar la feature.
+- **L9** T3 ejecutado por worker. Scoring puro (solo Foundation) con
+  umbrales estrictos + histéresis de release; fórmula: penalty = (frenadas×12
+  + acels×8 + excesos×10 + teléfono×25 si no conectado) / max(km, 0.1);
+  score = clamp(100 − penalty + 5 si conectado); diario S6 = media ponderada
+  por km recalculada desde el servidor. 75 tests nuevos (re-derivados en
+  Python como doble comprobación). Riesgos documentados: supabase-swift sin
+  compilar (v2.55.5 verificada a ojo), eje longitudinal asume montaje
+  vertical del iPhone, sin datos de límite de velocidad aún (eventos de
+  exceso = 0 hasta MapKit en T4), señal de uso del móvil = proxy
+  didBecomeActive, subidas fallidas sin cola de reintento. Veredictos:
+  S4 ✓, S5 ✓, S6 ✓, S10 ✓, S12 ✓, S13 ✓ (todos pendientes de compilación
+  en CI).
+- **L10** T5 ejecutado por worker: módulo `Drivy/Monetization` (12 ficheros,
+  StoreKit aislado en un único fichero tras protocolo) + 78 tests (reglas S9
+  re-derivadas en Python, 35/35). Decisión de spec (ambigüedad S9): el cap
+  de 1 liga del plan Free aplica SIEMPRE, también durante la ventana de 7
+  días de histórico completo — base: el contraste del spec «1 liga» vs
+  «ligas ilimitadas». Anchor del gating sin backend: perfil/fecha del primer
+  trayecto (cableado en integración). Veredicto: S9 ✓ (pendiente de
+  compilación y StoreKit real en CI).
+- **L11** T4 ejecutado por worker: pantallas Hoy/Ligas/detalle + share card
+  (S8, ImageRenderer 1080px) + 75 tests. Hueco deliberado: el mapa del
+  detalle no dibuja aún porque DriveRecorder no expone coordenadas
+  (LocalRouteStore vacío) — wiring de track local en integración. Riesgos:
+  supabase-swift sin compilar, RPC errors mapeados por string, código de
+  invite con colisión → error genérico (unique constraint). Racha S6
+  revisada a mano contra el spec literal: correcta. Veredictos: S6 ✓,
+  S7 ✓, S8 ✓ (pendientes de compilación en CI).
+- **L13** Integración S9 + cierre del hueco L11 (worker, superficies
+  ampliadas tras escalado): FreemiumSessionCoordinator a nivel app (anchor
+  = auth.users.created_at vía UserSummary.createdAt, re-anclaje al primer
+  trayecto una vez por cuenta), paywall once-ever tras el primer trayecto
+  (persistido, nunca bloquea registrar), pantalla Histórico en Hoy con
+  fila de bloqueo + upsell (canViewHistory), cap de 1 liga en free que
+  bloquea create/join antes de llamar al RPC, y ruta local expuesta por
+  DriveRecorder para la polyline del detalle. 53 tests nuevos. Revisado
+  a mano: sin coordenadas en el payload de subida, ciclo de vida por
+  cuenta correcto. Veredicto: S9 wired ✓, L11 cerrado.
+- **L12** T6 ejecutado por worker: `.github/workflows/ci.yml` (2 jobs,
+  macos-15): test = xcodegen + assert de scheme/targets + xcodebuild test en
+  iPhone 16; build-release = build Release unsigned genérico solo en
+  main/dispatch. TestFlight firmado queda como TODO documentado en el
+  header del workflow (secrets: APPLE_TEAM_ID, certificados p12, API key
+  de ASC) — no hay secrets en el repo. Pendiente humano: activar
+  capability Sign in with Apple en el App ID del portal. Verificación:
+  YAML parse + bash -n (10/10) + lógica del assert probada positiva y
+  negativa; nunca ejecutado. Veredicto S11: parcial (PR tests ✓ real,
+  archive firmado pendiente de secrets).
+- **L14** T7 verificación final vía CI (GitHub Actions, macos-15, Xcode
+  16.4, simulador iPhone 16, run 40523089024, PR #5): **Executed 301
+  tests, with 0 failures**. Ciclo de fix hasta verde: a0d028f (MainActor
+  init en default arg), 029717b (opcional share card), f1f4015
+  (AsyncStream entregaba elemento bufferizado a listener cancelado).
+  Veredicto por S#: S1 ✓ concepto, S2 ✓ CI, S3 ✓ nativo, S4 ✓ tracking,
+  S5 ✓ scoring, S6 ✓ diario/racha, S7 ✓ ligas, S8 ✓ share card (QA
+  visual en dispositivo pendiente), S9 ✓ freemium (compra real pendiente
+  de StoreKit config/sandbox), S10 ✓ Supabase, S11 PARCIAL (PR tests ✓
+  real; archive firmado TestFlight pendiente de secrets ASC), S12 ✓
+  privacidad, S13 ✓ conducción conectada, S14 ✓ identidad. Pendiente
+  post-MVP: prueba en dispositivo real, StoreKit sandbox, capability en
+  portal Apple, TestFlight. MVP cerrado en código; merge de la cadena de
+  PRs: decisión del usuario.
