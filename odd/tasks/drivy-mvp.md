@@ -68,13 +68,14 @@ GitHub Actions (runner macOS).
   changes) y motor de scoring v1 como módulo testeable puro (inyección de
   muestras). Route: delegado. Commit: `feat(app): drive tracking and scoring
   engine`.
-- **T4** (S6, S7, S8) Pantallas core: Hoy (score, racha), detalle de trayecto
-  con mapa, Ligas + invite, share card. Route: delegado. Commit:
+- **T4** (S6, S7, S8) ✅ DONE — Pantallas core: Hoy (score, racha), detalle
+  de trayecto con mapa, Ligas + invite, share card. Route: delegado. Commit:
   `feat(app): core screens and share card`.
-- **T5** (S9) Paywall StoreKit 2 y límites freemium. Route: delegado. Commit:
-  `feat(app): freemium paywall with storekit 2`.
-- **T6** (S11) Workflow GitHub Actions: PR (tests) y main (release build).
-  Route: delegado. Commit: `feat(ci): macos build and test pipeline`.
+- **T5** (S9) ✅ DONE — Paywall StoreKit 2 y límites freemium. Route:
+  delegado. Commit: `feat(app): freemium paywall with storekit 2`.
+- **T6** (S11) ✅ DONE (parcial por diseño) — Workflow GitHub Actions: PR
+  (tests) y main (release build sin firmar). Route: delegado. Commit:
+  `feat(ci): macos build and test pipeline`.
 - **T7** Verificación final: suite completa en CI, veredicto por S#.
   Route: QA delegado. Commit: — (evidencia en este Log).
 
@@ -134,3 +135,29 @@ GitHub Actions (runner macOS).
   didBecomeActive, subidas fallidas sin cola de reintento. Veredictos:
   S4 ✓, S5 ✓, S6 ✓, S10 ✓, S12 ✓, S13 ✓ (todos pendientes de compilación
   en CI).
+- **L10** T5 ejecutado por worker: módulo `Drivy/Monetization` (12 ficheros,
+  StoreKit aislado en un único fichero tras protocolo) + 78 tests (reglas S9
+  re-derivadas en Python, 35/35). Decisión de spec (ambigüedad S9): el cap
+  de 1 liga del plan Free aplica SIEMPRE, también durante la ventana de 7
+  días de histórico completo — base: el contraste del spec «1 liga» vs
+  «ligas ilimitadas». Anchor del gating sin backend: perfil/fecha del primer
+  trayecto (cableado en integración). Veredicto: S9 ✓ (pendiente de
+  compilación y StoreKit real en CI).
+- **L11** T4 ejecutado por worker: pantallas Hoy/Ligas/detalle + share card
+  (S8, ImageRenderer 1080px) + 75 tests. Hueco deliberado: el mapa del
+  detalle no dibuja aún porque DriveRecorder no expone coordenadas
+  (LocalRouteStore vacío) — wiring de track local en integración. Riesgos:
+  supabase-swift sin compilar, RPC errors mapeados por string, código de
+  invite con colisión → error genérico (unique constraint). Racha S6
+  revisada a mano contra el spec literal: correcta. Veredictos: S6 ✓,
+  S7 ✓, S8 ✓ (pendientes de compilación en CI).
+- **L12** T6 ejecutado por worker: `.github/workflows/ci.yml` (2 jobs,
+  macos-15): test = xcodegen + assert de scheme/targets + xcodebuild test en
+  iPhone 16; build-release = build Release unsigned genérico solo en
+  main/dispatch. TestFlight firmado queda como TODO documentado en el
+  header del workflow (secrets: APPLE_TEAM_ID, certificados p12, API key
+  de ASC) — no hay secrets en el repo. Pendiente humano: activar
+  capability Sign in with Apple en el App ID del portal. Verificación:
+  YAML parse + bash -n (10/10) + lógica del assert probada positiva y
+  negativa; nunca ejecutado. Veredicto S11: parcial (PR tests ✓ real,
+  archive firmado pendiente de secrets).
