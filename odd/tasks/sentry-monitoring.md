@@ -16,10 +16,11 @@ Branch `feat/sentry-monitoring`; delivery: single PR; test runner: XCTest on Git
 ## Tasks
 
 - [x] **T1** S2-S5 — create Sentry project + integrate SDK, auth capture, CI dSYM upload. Route: delegated (Pi `deepseek-v4-flash`; user rule: orchestrator delegates to Pi). Commit: 7f51bee (orchestrator diff review OK; no local compiler, CI is first build).
-- [ ] **T2** S6 — independent verification (Risk item 5: new dependency + CI). Route: delegated (Pi). Evidence: —
+- [x] **T2** S6 — independent verification (Risk item 5: new dependency + CI). Route: delegated (Pi). Evidence: CI run 40561679036 (310 tests, 0 failures); test event HTTP 200 → issue DRIVY-1; onboarding run steps completed. Verdict S2-S6 PASS, no blockers.
 
 ## Log
 
 - **L1** 2026-10-27 User: «funciona, aparentemente perfecto, [Image #1] integra sentry vamos a dejarlo bien monitorizado ya desde el principio». Image: Sentry "Create a Project" page, org slug `acr-studio`, run code `ca95b56bcc`, recommends `npx @sentry/agent-plugin install acr-studio#ca95b56bcc`.
 - **L2** Decision: skip the agent plugin (it installs a Claude Code plugin that needs a restart); Pi already has the Sentry MCP connected (`mcp.sentry.dev`, OAuth) and creates the project directly.
 - **L3** T1 done by Pi `sentry-dev`: Sentry project `drivy` (id 4512329624125520, region de.sentry.io) created via MCP; onboarding run ca95b56bcc updated (create_project, connect_mcp done; instrument_app active). Commit 7f51bee: S2-S5. PR template gains the `SENTRY_AUTH_TOKEN` note.
+- **L4** T2 verified by Pi `sentry-qa`: S2-S6 PASS, no blockers. Advisories: dSYM step only statically verified (signed job is main-only, first proof on the first main run with SENTRY_AUTH_TOKEN); tracesSampleRate 0.2 enables performance tracing (orchestrator choice, not in S3); `--include-sources` uploads sources to Sentry; platform `apple-ios` not readable via MCP.

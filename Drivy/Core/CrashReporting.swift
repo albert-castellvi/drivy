@@ -44,7 +44,7 @@ enum CrashReporting {
             SentrySDK.setUser(nil)
             return
         }
-        // Fully qualified on purpose: the app has its own `User` type.
+        // Fully qualified on purpose: Supabase also exports a `User` type.
         SentrySDK.setUser(Sentry.User(userId: id))
     }
 
