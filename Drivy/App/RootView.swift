@@ -12,6 +12,8 @@ struct RootView: View {
 
     @StateObject private var freemiumSession = FreemiumSessionCoordinator()
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
         Group {
             switch auth.state {
@@ -27,6 +29,12 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: auth.state)
         .task(id: auth.signedInUser?.id) { await syncFreemiumSession() }
+        // S7: the reminder follows the day's progress, so it is rebuilt every time
+        // the app comes back to the foreground.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, auth.signedInUser != nil else { return }
+            Task { await DriveNotifications.refresh() }
+        }
     }
 
     /// The tabs are only built once the session has a freemium service, because
