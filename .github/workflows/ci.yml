@@ -246,9 +246,15 @@ jobs:
           echo "::add-mask::$key_name"
           mkdir -p "$key_dir"
           chmod 700 "$key_dir"
-          # -D is the macOS/BSD spelling; --decode is kept as a portability net.
-          if ! printf '%s' "$ASC_KEY_BASE64" | base64 -D > "$key_path" 2>/dev/null; then
-            printf '%s' "$ASC_KEY_BASE64" | base64 --decode > "$key_path"
+          # The secret may hold either the base64 of the .p8 file or the raw
+          # PEM text itself — accept both instead of failing on a paste detail.
+          if printf '%s' "$ASC_KEY_BASE64" | grep -q 'BEGIN PRIVATE KEY'; then
+            printf '%s\n' "$ASC_KEY_BASE64" > "$key_path"
+          else
+            # -D is the macOS/BSD spelling; --decode is kept as a portability net.
+            if ! printf '%s' "$ASC_KEY_BASE64" | base64 -D > "$key_path" 2>/dev/null; then
+              printf '%s' "$ASC_KEY_BASE64" | base64 --decode > "$key_path"
+            fi
           fi
           chmod 600 "$key_path"
           if [ ! -s "$key_path" ]; then
