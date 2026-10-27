@@ -67,9 +67,12 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
     quien haya sumado XP la semana anterior o se haya unido nuevo.
   - Ranking semanal por XP de la semana. Suben los 7 primeros y bajan los 5
     últimos **(supuesto)**; en Bronce no se baja y en Diamante no se sube.
-  - Participación opt-in con un interruptor en Ajustes y una invitación única
-    tras el primer trayecto **(supuesto: S12 de privacidad del MVP; en el grupo
-    público solo se ve el nombre visible)**.
+    Para subir hay que haber sumado XP esa semana, y en grupos de menos de 12
+    nunca baja nadie del top 7 (L10).
+  - Participación opt-in con un interruptor en Ajustes y una tarjeta de
+    invitación en la pestaña Ligas mientras no se haya decidido (L9)
+    **(supuesto: S12 de privacidad del MVP; en el grupo público solo se ve el
+    nombre visible)**.
   - Asignación de grupo y ascenso/descenso perezosos: se resuelven en la
     primera llamada del usuario en la semana nueva (L8), sin jobs.
   - Las ligas privadas pasan a ordenar por XP semanal en lugar de score+km.
@@ -108,19 +111,24 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
 - **T1** (S1, S2, S4, S5, S6, S8) ⏳ — Migración `0002`: `lesson_completions`,
   `quest_completions`, `streak_repairs`, tablas de divisiones/grupos/resultados
   semanales, `league_opt_in` en perfil, función de XP, RPCs de ranking por XP,
-  job `pg_cron`, RLS y arreglos de S10. Risk: items 1, 2, 3. Commit propio.
-  Route: inline.
+  RLS y arreglos de S10 (sin `pg_cron`, L8). Risk: items 1, 2, 3. Commit
+  propio `f252810`. Route: inline. RED: 6/6 fallan en la base (S10 con el
+  mismo `infinite recursion` que producción); GREEN: 6/6 con 0002.
+- **T1b** (S1-S8) ✅ DONE — Capa de datos compartida `ProgressDataLoading` +
+  fake. Commit `507e25c`. Route: inline (estado compartido de todos los writers).
 - **T2** (S1, S4, S8) ⏳ — Racha v2 + hielos + reparación Premium + XP en Hoy.
-  Route: pendiente.
-- **T3** (S2) ⏳ — Test de teoría + banco de preguntas. Route: pendiente.
+  Route: delegado, writer A (con T6 y la share card de T9).
+- **T3** (S2) ⏳ — Test de teoría + banco de preguntas. Route: delegado,
+  writer B (con T5).
 - **T4** (S2) ⏳ — Resumen post-trayecto con eventos en el mapa. Route:
-  pendiente.
-- **T5** (S3) ⏳ — Pestaña Camino y unidades. Route: pendiente.
-- **T6** (S6) ⏳ — Misiones diarias. Route: pendiente.
+  delegado, writer C.
+- **T5** (S3) ⏳ — Pestaña Camino y unidades. Route: delegado, writer B.
+- **T6** (S6) ⏳ — Misiones diarias. Route: delegado, writer A.
 - **T7** (S5) ⏳ — Ligas públicas en iOS + ranking privado por XP. Route:
-  pendiente.
-- **T8** (S7) ⏳ — Notificaciones locales. Route: pendiente.
-- **T9** (S9) ⏳ — Share card y documentación. Route: pendiente.
+  delegado, writer D.
+- **T8** (S7) ⏳ — Notificaciones locales. Route: inline (parent, al integrar:
+  toca DriveRecorder, la app y los puntos de enganche de B y C).
+- **T9** (S9) ⏳ — Share card (writer A) y documentación (parent).
 - **T10** — Verificador independiente (items 1, 2 y 3 de alto riesgo).
 
 ## Log
@@ -157,3 +165,23 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
   liquidan de forma perezosa en la primera llamada de la semana (como
   Duolingo), con un lock por división y semana. Sustituye a «Cierre semanal
   con un job de `pg_cron`» de S5 (detalle técnico, mismo comportamiento).
+- **L9** (2026-10-27) Rutas: writer trigger (a) — cuatro unidades
+  independientes con superficies disjuntas, cada una de varios ficheros y
+  más de 100 líneas, lanzadas a la vez en Pi (deepseek, effort medio, regla
+  de ~/CLAUDE.md). No hay toolchain Swift en esta máquina (Linux): CI en
+  macos-26 es el compilador. El parent posee git, `TodayView` lo integra el
+  writer A con los contratos fijados de B (`LessonQuizView`) y C
+  (`DriveDebriefView`), y T8 lo hace el parent. Decisión de UX: la invitación
+  a ligas públicas es una tarjeta en la pestaña Ligas, no otra hoja tras el
+  primer trayecto (ya hay resumen + paywall); S5 se reescribe en ese punto.
+- **L10** (2026-10-27) Verificador independiente de T1 (Pi deepseek, scratch
+  `/tmp/drivy-probe.agD8PN`): 22/22 en verde, sin bloqueadores. Avisos
+  aplicados en `0002` antes de desplegar: A2 (fallo previo: cualquiera podía
+  insertarse en una liga privada sin código; ahora solo el dueño se añade a sí
+  mismo y el resto pasa por `join_league_by_code`), A4 (`p_week_start` se
+  redondea a su lunes en el ranking y en `my_xp`), A6 (días de lección y misión
+  limitados a hoy y ayer en Madrid; reparaciones a 3 días). Las sondas se
+  guardan como `supabase/tests/adversarial.test.mjs`. Decisión A3 escrita en
+  S5. Pendientes asumidos: A1 (aplicar la migración antes de publicar la
+  build), A5 (tope de 30 probado solo en una sesión), A7 (el ledger se calcula
+  en cada lectura).

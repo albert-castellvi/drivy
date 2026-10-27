@@ -187,20 +187,22 @@ test('S1-S8: progress rows are private to their owner and cannot be forged for s
   const db = await freshDatabase();
   const owner = await createUser(db, 'Owner');
   const other = await createUser(db, 'Other');
-  await asUser(db, owner, `insert into public.lesson_completions (day, correct, total) values ('2026-10-27', 5, 5)`);
-  await asUser(db, owner, `insert into public.streak_repairs (day) values ('2026-10-20')`);
+  const today = (await db.query(`select public.madrid_today()::text as d`)).rows[0].d;
+  await asUser(db, owner, `insert into public.lesson_completions (day, correct, total) values ($1, 5, 5)`, [today]);
+  await asUser(db, owner, `insert into public.streak_repairs (day) values ($1::date - 1)`, [today]);
 
   assert.equal((await asUser(db, other, `select * from public.lesson_completions`)).length, 0);
   assert.equal((await asUser(db, other, `select * from public.streak_repairs`)).length, 0);
   assert.equal((await asUser(db, other, `select * from public.xp_ledger`)).length, 0);
   await assert.rejects(
-    asUser(db, other, `insert into public.lesson_completions (user_id, day, correct, total) values ($1, '2026-10-28', 1, 5)`, [
+    asUser(db, other, `insert into public.lesson_completions (user_id, day, correct, total) values ($1, $2, 1, 5)`, [
       owner,
+      today,
     ]),
     /row-level security/,
   );
   await assert.rejects(
-    asUser(db, owner, `insert into public.lesson_completions (day, correct, total) values ('2026-10-28', 6, 5)`),
+    asUser(db, owner, `insert into public.lesson_completions (day, correct, total) values ($1::date - 1, 6, 5)`, [today]),
     /check constraint/,
   );
 });

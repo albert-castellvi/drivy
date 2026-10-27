@@ -59,6 +59,34 @@ create policy "profiles_select_self_or_league_mates"
     )
   );
 
+-- Joining someone else's league goes through join_league_by_code (invite code
+-- and 25-member cap). A direct insert is only for the owner adding themself
+-- right after creating the league; before, anyone could join any league.
+drop policy "league_members_insert_self" on public.league_members;
+create policy "league_members_insert_owner_self"
+  on public.league_members for insert to authenticated
+  with check (
+    user_id = auth.uid()
+    and exists (
+      select 1 from public.leagues
+      where leagues.id = league_members.league_id and leagues.owner_id = auth.uid()
+    )
+  );
+
+-- Today in Spain. Progress days come from the device: a lesson or quest can be
+-- stored for today or yesterday only (yesterday covers Canarias, one hour
+-- behind, around midnight), so nobody back- or pre-fills a week of XP.
+-- ponytail: still trusts one day of client clock; move the day server-side if
+-- a public league ever carries a prize.
+create or replace function public.madrid_today()
+returns date
+language sql
+stable
+set search_path = public
+as $$
+  select (now() at time zone 'Europe/Madrid')::date;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- S2: theory lessons (one per day counts for the streak and for XP)
 -- ---------------------------------------------------------------------------
@@ -69,7 +97,8 @@ create table public.lesson_completions (
   total        integer not null check (total between 1 and 20),
   completed_at timestamptz not null default now(),
   primary key (user_id, day),
-  check (correct <= total)
+  check (correct <= total),
+  check (day between public.madrid_today() - 1 and public.madrid_today())
 );
 
 -- ---------------------------------------------------------------------------
@@ -80,7 +109,8 @@ create table public.quest_completions (
   day          date not null,
   quest_id     text not null check (quest_id ~ '^[a-z_]{1,40}$'),
   completed_at timestamptz not null default now(),
-  primary key (user_id, day, quest_id)
+  primary key (user_id, day, quest_id),
+  check (day between public.madrid_today() - 1 and public.madrid_today())
 );
 
 -- ---------------------------------------------------------------------------
@@ -102,7 +132,8 @@ create table public.habit_levels (
 -- ---------------------------------------------------------------------------
 create table public.streak_repairs (
   user_id    uuid not null default auth.uid() references public.profiles (id) on delete cascade,
-  day        date not null,
+  -- The repair window is 48 h (S8): only a recent day can be forgiven.
+  day        date not null check (day between public.madrid_today() - 3 and public.madrid_today()),
   created_at timestamptz not null default now(),
   primary key (user_id, day)
 );
@@ -171,17 +202,20 @@ union all
 select user_id, (completed_at at time zone 'Europe/Madrid')::date, 'habit_level', 50
 from public.habit_levels;
 
--- Caller's lifetime XP and XP of the week starting on p_week_start.
+-- Caller's lifetime XP and XP of the Monday-to-Sunday week of p_week_start
+-- (any day of the week is accepted and rounded down to its Monday).
 create or replace function public.my_xp(p_week_start date)
 returns table (total_xp bigint, week_xp bigint)
 language sql
 stable
 set search_path = public
 as $$
-  select coalesce(sum(xp), 0)::bigint,
-         coalesce(sum(xp) filter (where day >= p_week_start and day < p_week_start + 7), 0)::bigint
-  from public.xp_ledger
-  where user_id = auth.uid();
+  with w as (select date_trunc('week', p_week_start)::date as monday)
+  select coalesce(sum(l.xp), 0)::bigint,
+         coalesce(sum(l.xp) filter (where l.day >= w.monday and l.day < w.monday + 7), 0)::bigint
+  from w
+  left join public.xp_ledger l on l.user_id = auth.uid()
+  group by w.monday;
 $$;
 
 revoke execute on function public.my_xp(date) from public, anon;
@@ -191,6 +225,8 @@ grant execute on function public.my_xp(date) to authenticated;
 -- S5: private leagues rank by weekly XP (was distance-weighted score + km).
 -- Every member is listed, 0 XP included, and only members can read it (the
 -- previous version answered any signed-in caller who knew the league id).
+-- p_week_start is rounded down to its Monday, so a mid-week date cannot shift
+-- the window.
 -- ---------------------------------------------------------------------------
 drop function public.league_weekly_ranking(uuid, date);
 
@@ -215,7 +251,8 @@ as $$
   left join (
     select l.user_id, sum(l.xp) as week_xp
     from public.xp_ledger l
-    where l.day >= p_week_start and l.day < p_week_start + 7
+    cross join (select date_trunc('week', p_week_start)::date as monday) w
+    where l.day >= w.monday and l.day < w.monday + 7
     group by l.user_id
   ) x on x.user_id = m.user_id
   where m.league_id = p_league_id
