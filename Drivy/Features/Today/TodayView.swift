@@ -1,33 +1,54 @@
 import SwiftUI
 import UIKit
 
-/// Tab "Hoy": manual drive recording lives here (S4); the daily Driver Score and
-/// the streak are filled in by T4.
+/// Tab "Hoy" (S4, S6): manual drive recording, today's Driver Score, the streak
+/// and the list of the day's drives.
 struct TodayView: View {
 
+    @EnvironmentObject private var auth: AuthViewModel
+
     @StateObject private var recorder = DriveRecorder()
+    @StateObject private var model = TodayViewModel()
+    @State private var isShowingShareCard = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    // T3: the manual button stays the primary action (S4).
                     DriveCard(recorder: recorder)
 
-                    PlaceholderCard(
-                        systemImage: "speedometer",
-                        title: "Driver Score",
-                        message: "Tu nota de hoy aparecerá aquí en cuanto registres tu primer trayecto."
-                    )
+                    if model.isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    }
 
-                    PlaceholderCard(
-                        systemImage: "flame.fill",
-                        title: "Racha",
-                        message: "Conduce cada día para mantener la racha. Tienes un día de margen antes de perderla."
-                    )
+                    scoreCard
+                    streakCard
+                    drivesSection
+
+                    if let errorMessage = model.errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    shareButton
                 }
                 .padding()
             }
             .navigationTitle("Hoy")
+            .refreshable { await reload() }
+            .task(id: auth.signedInUser?.id) { await reload() }
+            // A finished drive is written to `drives` and `daily_scores` by the
+            // upload, so the day is read again as soon as the recorder has it.
+            .onChange(of: recorder.lastCompletedDrive) { _, _ in
+                Task { await reload() }
+            }
+            .sheet(isPresented: $isShowingShareCard) {
+                ShareCardSheet(userID: signedInUserID)
+            }
             // S5: coming back to the app during a drive means the phone was
             // unlocked and used, which is the closest available phone-use signal.
             .onReceive(
@@ -36,6 +57,129 @@ struct TodayView: View {
                 recorder.registerPhoneUseEvent()
             }
         }
+    }
+
+    // MARK: - Sections
+
+    private var scoreCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Driver Score de hoy", systemImage: "speedometer")
+                .font(.headline)
+
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(DriveFormat.score(model.snapshot.score))
+                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(DriveFormat.distance(model.snapshot.distanceKm))
+                    Text(DriveFormat.drivesCount(model.snapshot.drivesCount))
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+
+            if model.snapshot.score == nil {
+                Text("Registra tu primer trayecto del día para tener nota.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .drivyCard()
+    }
+
+    private var streakCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Racha", systemImage: "flame.fill")
+                .font(.headline)
+
+            Text(model.snapshot.streak.headline)
+                .font(.title3.weight(.semibold))
+
+            Text(model.snapshot.streak.detail)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .drivyCard()
+    }
+
+    private var drivesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Trayectos de hoy")
+                .font(.headline)
+
+            if model.snapshot.drives.isEmpty {
+                Text("Aún no hay trayectos hoy.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.snapshot.drives) { drive in
+                    NavigationLink {
+                        DriveDetailView(drive: drive)
+                    } label: {
+                        DriveSummaryRow(drive: drive)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .drivyCard()
+    }
+
+    private var shareButton: some View {
+        Button {
+            isShowingShareCard = true
+        } label: {
+            Label("Compartir mi tarjeta", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    // MARK: - Data
+
+    private var signedInUserID: String {
+        auth.signedInUser?.id ?? ""
+    }
+
+    private func reload() async {
+        guard let userID = auth.signedInUser?.id else { return }
+        await model.load(userID: userID)
+    }
+}
+
+/// One line of today's list: time, distance and score, with the detail one tap
+/// away.
+private struct DriveSummaryRow: View {
+
+    let drive: DriveHistoryRow
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(DriveFormat.time(drive.startedAt))
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(DriveFormat.distance(drive.distanceKm))
+                    .font(.subheadline.weight(.medium))
+                Text(DriveFormat.duration(TimeInterval(drive.durationSeconds)))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Text(DriveFormat.score(drive.score))
+                .font(.title3.monospacedDigit().weight(.semibold))
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(Rectangle())
     }
 }
 
@@ -163,4 +307,5 @@ private struct DriveCard: View {
 
 #Preview {
     TodayView()
+        .environmentObject(AuthViewModel())
 }

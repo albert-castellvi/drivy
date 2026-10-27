@@ -1,0 +1,87 @@
+import Foundation
+
+/// Everything the Hoy screen and the share card need from S6, read once so both
+/// show exactly the same numbers.
+struct TodaySnapshot: Equatable {
+
+    /// `yyyy-MM-dd` of the local day the snapshot describes.
+    let dayKey: String
+
+    /// Today's Driver Score; `nil` when there is no drive today.
+    let score: Int?
+
+    let distanceKm: Double
+
+    let drivesCount: Int
+
+    let streak: Streak
+
+    /// Today's drives, newest first.
+    let drives: [DriveHistoryRow]
+
+    static let empty = TodaySnapshot(
+        dayKey: "",
+        score: nil,
+        distanceKm: 0,
+        drivesCount: 0,
+        streak: .empty,
+        drives: []
+    )
+}
+
+/// The S6 read path in one place.
+///
+/// The daily score comes from `public.daily_scores`, which the upload path writes
+/// when a drive finishes. When the row is missing (an upload that failed, or a day
+/// recorded on another device that has not synced) the same distance-weighted rule
+/// is applied to today's drives instead of inventing a number.
+struct TodaySnapshotLoader {
+
+    /// Days of `daily_scores` read to rebuild the streak. A year is far more than
+    /// any streak the MVP will see.
+    static let streakHistoryDays = 400
+
+    let dataLoader: TodayDataLoading
+
+    var calendar: Calendar = .current
+
+    func load(userID: String, now: Date) async throws -> TodaySnapshot {
+        let todayKey = DriveDay.key(for: now, calendar: calendar)
+        let firstDayDate = calendar.date(byAdding: .day, value: -Self.streakHistoryDays, to: now) ?? now
+        let firstDayKey = DriveDay.key(for: firstDayDate, calendar: calendar)
+
+        let scores = try await dataLoader.dailyScores(
+            userID: userID,
+            from: firstDayKey,
+            to: todayKey
+        )
+        let drives = try await dataLoader.drives(
+            userID: userID,
+            dayStart: DriveDay.start(of: now, calendar: calendar),
+            dayEnd: DriveDay.end(of: now, calendar: calendar)
+        )
+
+        let drivingDays = Set(
+            scores
+                .filter { $0.drivesCount > 0 }
+                .compactMap { DayKey.date(from: $0.day, calendar: calendar) }
+        )
+        let streak = StreakCalculator.streak(
+            drivingDays: drivingDays,
+            today: now,
+            calendar: calendar
+        )
+
+        let storedToday = scores.first { $0.day == todayKey }
+        let computedToday = DailyScoreCalculator.dailyScore(from: drives.map(\.aggregateInput))
+
+        return TodaySnapshot(
+            dayKey: todayKey,
+            score: storedToday?.score ?? computedToday?.score,
+            distanceKm: storedToday?.distanceKm ?? computedToday?.distanceKm ?? 0,
+            drivesCount: storedToday?.drivesCount ?? computedToday?.drivesCount ?? 0,
+            streak: streak,
+            drives: drives
+        )
+    }
+}
