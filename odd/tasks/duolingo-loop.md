@@ -108,7 +108,7 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
 - **T0** (S10) ✅ DONE — Verificar contra el Supabase real (solo lectura) la
   recursión RLS y la zona horaria. Route: delegado (Pi deepseek, solo
   lectura). Evidencia en L8.
-- **T1** (S1, S2, S4, S5, S6, S8) ⏳ — Migración `0002`: `lesson_completions`,
+- **T1** (S1, S2, S4, S5, S6, S8) ✅ DONE — Migración `0002`: `lesson_completions`,
   `quest_completions`, `streak_repairs`, tablas de divisiones/grupos/resultados
   semanales, `league_opt_in` en perfil, función de XP, RPCs de ranking por XP,
   RLS y arreglos de S10 (sin `pg_cron`, L8). Risk: items 1, 2, 3. Commit
