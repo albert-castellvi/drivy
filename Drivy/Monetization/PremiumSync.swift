@@ -76,7 +76,9 @@ final class PremiumSync: PremiumSyncing {
     /// plan re-reads never cause a second post of the same transaction.
     private var postedJWSs: Set<String> = []
 
-    init(endpoint: PremiumSyncEndpoint = SupabasePremiumSyncEndpoint()) {
+    // Nonisolated so it can be a default argument of `FreemiumService.init`
+    // (default arguments are evaluated outside the main actor); it only stores.
+    nonisolated init(endpoint: PremiumSyncEndpoint = SupabasePremiumSyncEndpoint()) {
         self.endpoint = endpoint
     }
 
