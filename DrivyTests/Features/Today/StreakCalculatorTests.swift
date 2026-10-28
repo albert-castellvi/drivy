@@ -259,17 +259,99 @@ final class StreakCalculatorTests: XCTestCase {
     /// names first.
     func testDetailAsksForTheLessonAndNotForADrive() {
         XCTAssertEqual(
-            streak(driving: [driving(90, day: 9)]).detail,
+            streak(driving: [driving(90, day: 9)]).detail(todayHasDirtyDriving: false),
             "Haz la lección de hoy (1 minuto) para sumar el día. No hace falta conducir."
         )
         XCTAssertEqual(
-            streak().detail,
+            streak().detail(todayHasDirtyDriving: false),
             "Haz la lección de hoy para empezar la racha. Los días sin coche no la rompen."
         )
         XCTAssertEqual(
-            streak(lessons: [date(10)]).detail,
+            streak(lessons: [date(10)]).detail(todayHasDirtyDriving: false),
             "Hoy ya cuenta para tu racha."
         )
+    }
+
+    /// S1: "Una lección ese mismo día no lo rescata". On a day whose driving is
+    /// already below the threshold the card must not promise the day, because the
+    /// lesson cannot give it (B5).
+    func testDetailOnADirtyDrivingDayDoesNotPromiseTheDay() {
+        let sut = streak(driving: [driving(90, day: 9), driving(60, day: 10)])
+
+        XCTAssertFalse(sut.isTodayCounted)
+        XCTAssertEqual(
+            sut.detail(todayHasDirtyDriving: true),
+            "Hoy ya hay trayectos con nota por debajo de 75: la lección no suma el día. "
+                + "Mañana cuenta si conduces con cuidado o si haces la lección."
+        )
+    }
+
+    /// S1/B5: the lesson of a dirty day does not change the copy, because it does
+    /// not rescue the day: the message is the same before and after doing it.
+    func testTheLessonOfADirtyDayDoesNotChangeTheMessage() {
+        let before = streak(driving: [driving(60, day: 10)])
+        let after = streak(driving: [driving(60, day: 10)], lessons: [date(10)])
+
+        XCTAssertFalse(before.isTodayCounted)
+        XCTAssertFalse(after.isTodayCounted)
+        XCTAssertEqual(
+            before.detail(todayHasDirtyDriving: true),
+            after.detail(todayHasDirtyDriving: true)
+        )
+        XCTAssertEqual(
+            Streak.lessonMessage(hasLessonToday: false, todayHasDirtyDriving: true),
+            Streak.lessonMessage(hasLessonToday: true, todayHasDirtyDriving: true)
+        )
+    }
+
+    /// S1/B5: the state the copy is branched on. A day without driving is never
+    /// dirty ("los días sin coche no rompen nada"), and the threshold is the same one
+    /// the run uses.
+    func testTodayIsDirtyOnlyWithDrivingBelowTheThreshold() {
+        XCTAssertTrue(Streak.hasDirtyDrivingToday(dayScore: 60, drivesCount: 1))
+        XCTAssertFalse(
+            Streak.hasDirtyDrivingToday(
+                dayScore: StreakCalculator.cleanDayThreshold,
+                drivesCount: 1
+            )
+        )
+        XCTAssertFalse(Streak.hasDirtyDrivingToday(dayScore: 90, drivesCount: 2))
+        XCTAssertFalse(Streak.hasDirtyDrivingToday(dayScore: nil, drivesCount: 0))
+        XCTAssertFalse(Streak.hasDirtyDrivingToday(dayScore: 60, drivesCount: 0))
+    }
+
+    /// S1/S2/B5: the lesson card promises the day only when the rule can give it.
+    func testLessonCardCopyFollowsTheDirtyDayRule() {
+        XCTAssertEqual(
+            Streak.lessonMessage(hasLessonToday: false, todayHasDirtyDriving: false),
+            "Un minuto de teoría. Hacerla ya hace que el día cuente para la racha, aunque no cojas el coche."
+        )
+        XCTAssertEqual(
+            Streak.lessonMessage(hasLessonToday: true, todayHasDirtyDriving: false),
+            "Ya has hecho la lección de hoy: cuenta para tu racha."
+        )
+        XCTAssertEqual(
+            Streak.lessonMessage(hasLessonToday: false, todayHasDirtyDriving: true),
+            Streak.notRescuedTodayMessage
+        )
+        XCTAssertEqual(
+            Streak.lessonMessage(hasLessonToday: true, todayHasDirtyDriving: true),
+            Streak.notRescuedTodayMessage
+        )
+    }
+
+    /// Safety principle: the copy on a dirty day says the lesson does not rescue the
+    /// day and never asks for more driving (S7).
+    func testTheDirtyDayCopyNeverInvitesToDriveMore() {
+        let copies = [
+            streak(driving: [driving(60, day: 10)]).detail(todayHasDirtyDriving: true),
+            Streak.lessonMessage(hasLessonToday: false, todayHasDirtyDriving: true)
+        ]
+
+        for copy in copies {
+            XCTAssertTrue(copy.contains("Mañana cuenta"))
+            XCTAssertFalse(copy.contains("más"))
+        }
     }
 
     func testFreezeTextFollowsTheWeeklyAllowance() {

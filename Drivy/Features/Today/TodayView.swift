@@ -24,7 +24,7 @@ struct TodayView: View {
 
     @StateObject private var recorder = DriveRecorder()
     @StateObject private var model = TodayViewModel()
-    @State private var activeSheet: ActiveSheet?
+    @State private var activeSheet: TodaySheet?
 
     /// Size of the hero Driver Score, scaled with Dynamic Type instead of frozen
     /// at 44 pt: the score is the main number of the screen and has to grow with
@@ -33,31 +33,6 @@ struct TodayView: View {
 
     /// "Presented once ever" flag of the paywall (S9).
     private let paywallGate = FirstDrivePaywallGate()
-
-    /// Sheets of the tab, in one enum so two `.sheet` modifiers cannot fight.
-    private enum ActiveSheet: Identifiable {
-        /// Share card (S9).
-        case shareCard
-        /// Paywall after the first drive and from the gating hook points (S9).
-        case paywall
-        /// Post-drive summary (S2): shown before the paywall, never instead of it.
-        case debrief(DriveRecord)
-        /// Theory lesson of the day (S2).
-        case lesson
-
-        var id: String {
-            switch self {
-            case .shareCard:
-                return "shareCard"
-            case .paywall:
-                return "paywall"
-            case .debrief(let record):
-                return "debrief-\(record.startedAt.timeIntervalSince1970)"
-            case .lesson:
-                return "lesson"
-            }
-        }
-    }
 
     var body: some View {
         NavigationStack {
@@ -171,7 +146,7 @@ struct TodayView: View {
             Text(model.snapshot.streak.headline)
                 .font(.title3.weight(.semibold))
 
-            Text(model.snapshot.streak.detail)
+            Text(model.snapshot.streak.detail(todayHasDirtyDriving: todayHasDirtyDriving))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -377,13 +352,29 @@ struct TodayView: View {
     // MARK: - Copy of the lesson card
 
     private var lessonMessage: String {
-        model.snapshot.hasLessonToday
-            ? "Ya has hecho la lección de hoy: cuenta para tu racha."
-            : "Un minuto de teoría. Hacerla ya hace que el día cuente para la racha, aunque no cojas el coche."
+        Streak.lessonMessage(
+            hasLessonToday: model.snapshot.hasLessonToday,
+            todayHasDirtyDriving: todayHasDirtyDriving
+        )
     }
 
     private var lessonButtonTitle: String {
         model.snapshot.hasLessonToday ? "Repasar la lección" : "Hacer la lección (1 minuto)"
+    }
+
+    /// S1: today already has driving and its daily score is below the clean-day
+    /// threshold, so the day is ruled out: "Una lección ese mismo día no lo
+    /// rescata". The copy of the streak card and of the lesson card is branched on
+    /// this value so neither promises a day the rule refuses (B5).
+    ///
+    /// `snapshot.score` is the same daily score the streak rule received (the stored
+    /// `daily_scores` row, or today's drives aggregated when it is not written yet),
+    /// so the copy cannot disagree with `isTodayCounted`.
+    private var todayHasDirtyDriving: Bool {
+        Streak.hasDirtyDrivingToday(
+            dayScore: model.snapshot.score,
+            drivesCount: model.snapshot.drivesCount
+        )
     }
 
     // MARK: - S9 hooks
@@ -396,8 +387,8 @@ struct TodayView: View {
     /// (S9/S12).
     ///
     /// The post-drive summary (S2) comes first and the paywall waits for it: L9
-    /// fixed the order debrief → paywall, and two sheets cannot be on screen at the
-    /// same time.
+    /// fixed the order debrief → paywall, two sheets cannot be on screen at the same
+    /// time, and the order itself lives in `PostDriveSheetScheduler` so it is tested.
     private func handleCompletedDrive(_ drive: DriveRecord) {
         RouteHandoff.store(coordinates: recorder.routeCoordinates, startedAt: drive.startedAt)
 
@@ -405,7 +396,8 @@ struct TodayView: View {
         // profile is older. Done once per account.
         freemiumSession.recordCompletedDrive(startedAt: drive.startedAt)
 
-        activeSheet = .debrief(drive)
+        let step = PostDriveSheetScheduler.driveDidComplete(drive)
+        activeSheet = step.nextSheet
 
         Task { await reload() }
     }
@@ -422,25 +414,32 @@ struct TodayView: View {
 
     /// S9: the paywall appears after the first completed drive, once ever, and only
     /// on the free plan. It is presentation state only: it never gates recording.
+    ///
+    /// The guards that make it wait for the debrief live in
+    /// `PostDriveSheetScheduler`: this function only feeds it the gate's own state
+    /// and applies the step it returns.
     private func presentPaywallIfNeeded() {
-        // Only a drive finished in this session triggers the paywall: a plan that
-        // arrives later (StoreKit is slow, or the user just purchased) must not turn
-        // a launch into an ad for drives recorded days ago.
-        guard recorder.lastCompletedDrive != nil else { return }
+        let paywall = PostDriveSheetScheduler.PaywallState(
+            // Only a drive finished in this session triggers the paywall: a plan that
+            // arrives later (StoreKit is slow, or the user just purchased) must not
+            // turn a launch into an ad for drives recorded days ago.
+            hasCompletedDriveThisSession: recorder.lastCompletedDrive != nil,
+            wasPresented: paywallGate.wasPresented,
+            isDue: paywallGate.shouldPresent(
+                completedDriveCount: max(model.snapshot.drivesCount, 1),
+                plan: freemium.plan
+            )
+        )
 
         // One sheet at a time: while the debrief or the lesson owns the screen the
         // paywall waits, and it is offered again as soon as it closes.
-        guard activeSheet == nil else { return }
+        let step = PostDriveSheetScheduler.paywallIfDue(shownSheet: activeSheet, paywall: paywall)
+        guard let nextSheet = step.nextSheet else { return }
 
-        let completedDriveCount = max(model.snapshot.drivesCount, 1)
-
-        guard paywallGate.shouldPresent(
-            completedDriveCount: completedDriveCount,
-            plan: freemium.plan
-        ) else { return }
-
-        paywallGate.markPresented()
-        activeSheet = .paywall
+        if step.consumesPaywallGate {
+            paywallGate.markPresented()
+        }
+        activeSheet = nextSheet
     }
 
     // MARK: - Data

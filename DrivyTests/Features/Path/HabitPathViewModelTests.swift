@@ -114,6 +114,54 @@ final class HabitPathViewModelTests: XCTestCase {
         XCTAssertEqual(sut.snapshot.units.first?.completedLevels, 1)
     }
 
+    /// S3/S4 (B4): a level reached by a drive finished in Hoy is recorded when Camino
+    /// reads the path again, and the next unit opens on the read that follows it.
+    ///
+    /// The view does exactly this: `load()`, and when that read recorded a level, one
+    /// more `load()`. The engine opens the next unit at the `completedAt` the server
+    /// stamped on the third level of the previous one, so the read that records the
+    /// level cannot see the unit it unlocks yet ("the next unit waits one refresh").
+    /// Without the second read the tab showed the reached levels but the next unit
+    /// stayed locked until a pull-to-refresh (B4).
+    func testAReloadAfterADriveRecordsTheReachedLevelsAndUnlocksTheNextUnit() async {
+        let (sut, progress) = makeSUT()
+        progress.driveRows = [drive(id: "row-1"), drive(id: "row-2")]
+
+        await sut.load()
+
+        XCTAssertTrue(progress.levels.isEmpty)
+        XCTAssertEqual(sut.snapshot.units.first?.qualifyingDrives, 2)
+        XCTAssertEqual(sut.snapshot.units[1].unit, HabitUnit.smoothAcceleration)
+        XCTAssertFalse(sut.snapshot.units[1].isUnlocked)
+
+        // The drive finished in Hoy and the tab becomes visible: it reloads.
+        progress.driveRows = (0..<15).map { drive(id: "row-\($0)") }
+        await sut.load()
+
+        XCTAssertEqual(
+            progress.levels.map(\.level),
+            Array(1...HabitPathEngine.levelRequirements.count)
+        )
+        XCTAssertFalse(sut.snapshot.pendingLevels.isEmpty)
+        XCTAssertEqual(
+            sut.snapshot.units.first?.completedLevels,
+            HabitPathEngine.levelRequirements.count
+        )
+        // Every level of the unit is stored, but the unit they open needs one more
+        // read: the engine only opens it at the stored `completedAt`.
+        XCTAssertFalse(sut.snapshot.units[1].isUnlocked)
+
+        await sut.load()
+
+        XCTAssertTrue(sut.snapshot.pendingLevels.isEmpty)
+        XCTAssertTrue(sut.snapshot.units[1].isUnlocked)
+        XCTAssertEqual(
+            sut.snapshot.xpFromLevels,
+            HabitPathEngine.levelRequirements.count * HabitPathEngine.xpPerLevel
+        )
+        XCTAssertEqual(progress.levels.count, HabitPathEngine.levelRequirements.count)
+    }
+
     func testALevelAlreadyOnTheServerIsNotRecordedAgain() async {
         let (sut, progress) = makeSUT()
         progress.levels = [

@@ -248,15 +248,64 @@ extension Streak {
     ///
     /// It always names the lesson first: S7 forbids inviting the user to drive, so
     /// the copy never asks for a drive.
-    var detail: String {
+    ///
+    /// - Parameter todayHasDirtyDriving: today already has driving and its daily
+    ///   score is below `StreakCalculator.cleanDayThreshold`. S1 is explicit that a
+    ///   lesson that same day does not rescue the day ("Una lección ese mismo día no
+    ///   lo rescata"), so promising the day there would be a lie the user pays a
+    ///   minute for (B5).
+    func detail(todayHasDirtyDriving: Bool) -> String {
         if isTodayCounted {
             return "Hoy ya cuenta para tu racha."
+        }
+        if todayHasDirtyDriving {
+            return Self.notRescuedTodayMessage
         }
         if days > 0 {
             return "Haz la lección de hoy (1 minuto) para sumar el día. No hace falta conducir."
         }
         return "Haz la lección de hoy para empezar la racha. Los días sin coche no la rompen."
     }
+
+    /// Copy of the lesson card of the Hoy tab (S1, S2).
+    ///
+    /// Same rule as `detail(todayHasDirtyDriving:)`: on a day whose driving is
+    /// already below the clean-day threshold the lesson cannot make the day count,
+    /// so the card states the rule instead of promising the day (B5). The button
+    /// stays available: the lesson still pays its XP (S4), it just does not rescue
+    /// this day.
+    static func lessonMessage(hasLessonToday: Bool, todayHasDirtyDriving: Bool) -> String {
+        if todayHasDirtyDriving {
+            return notRescuedTodayMessage
+        }
+        if hasLessonToday {
+            return "Ya has hecho la lección de hoy: cuenta para tu racha."
+        }
+        return "Un minuto de teoría. Hacerla ya hace que el día cuente para la racha, aunque no cojas el coche."
+    }
+
+    /// S1: today already has driving and its daily score is below the clean-day
+    /// threshold, which is the one state in which the day is already ruled out and
+    /// "Una lección ese mismo día no lo rescata". The copy of the racha card and of
+    /// the lesson card is branched on it, so neither promises a day the rule refuses
+    /// (B5).
+    ///
+    /// It is the same input the calculator received for today: the stored
+    /// `daily_scores` row, or today's drives aggregated when that row is not written
+    /// yet. A day without driving is never dirty (S1: "los días sin coche no rompen
+    /// nada"), hence the drive count.
+    static func hasDirtyDrivingToday(dayScore: Int?, drivesCount: Int) -> Bool {
+        guard drivesCount > 0, let dayScore else { return false }
+        return dayScore < StreakCalculator.cleanDayThreshold
+    }
+
+    /// S1: what the cards say on a day whose driving already rules the day out.
+    ///
+    /// It repeats the rule the calculator applies and what tomorrow needs, and it
+    /// never invites the user to drive: it names a clean drive and the lesson as the
+    /// two equal ways the next day counts, exactly as S1 defines them.
+    static let notRescuedTodayMessage = "Hoy ya hay trayectos con nota por debajo de 75: la lección no suma el día. "
+        + "Mañana cuenta si conduces con cuidado o si haces la lección."
 
     /// S1/S8: the freezes of the week, in one line.
     var freezeText: String {

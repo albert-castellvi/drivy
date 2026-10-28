@@ -16,6 +16,12 @@ struct PathView: View {
     /// Sheet of the theory lesson (S2), opened from the entry card of the tab.
     @State private var isPresentingLesson = false
 
+    /// Whether the tab has already been on screen once.
+    ///
+    /// The first load belongs to the `.task(id:)` of the view; every later
+    /// appearance is a re-entry into the tab and reloads the path (B4).
+    @State private var hasAppearedOnce = false
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -41,6 +47,20 @@ struct PathView: View {
             .navigationTitle("Camino")
             .refreshable { await reload() }
             .task(id: auth.signedInUser?.id) { await reload() }
+            // S3/S4 (B4): the tab content stays alive inside `TabView`, so
+            // `.task(id:)` does not fire again when the user comes back to Camino.
+            // A drive finished in Hoy is what reaches the next level, and the level
+            // is only recorded inside `load()`: without this reload the tab kept a
+            // stale "7 de 15 trayectos", the reached level never paid its 50 XP (S4)
+            // and the next unit stayed locked (S3) until a pull-to-refresh.
+            .onAppear {
+                guard hasAppearedOnce else {
+                    // First appearance: `.task(id:)` above already loads.
+                    hasAppearedOnce = true
+                    return
+                }
+                Task { await reload() }
+            }
             .sheet(
                 isPresented: $isPresentingLesson,
                 // The lesson makes the day count for the streak (S1), so the entry
@@ -131,10 +151,13 @@ struct PathView: View {
 
     // MARK: - Copy of the lesson card
 
+    /// Camino does not know today's driving score, so the copy states only what
+    /// is always true (S1): the lesson keeps the streak on a day without driving,
+    /// and it never rescues a day of driving below the threshold.
     private var lessonMessage: String {
         model.snapshot.hasLessonToday
-            ? "Ya has hecho la lección de hoy: cuenta para tu racha y suma XP."
-            : "Un minuto de teoría. Hacerla ya hace que el día cuente para la racha, aunque no cojas el coche."
+            ? "Ya has hecho la lección de hoy y has sumado XP."
+            : "Un minuto de teoría. En un día sin coche, la lección hace que el día cuente para la racha."
     }
 
     private var lessonButtonTitle: String {
@@ -143,8 +166,20 @@ struct PathView: View {
 
     // MARK: - Data
 
+    /// Reads the path again and, when that read recorded a level, once more.
+    ///
+    /// S3: the next unit opens at the `completedAt` the server stamped on the third
+    /// level of the previous one, so the read that records the level cannot see the
+    /// unit it unlocks (the engine says so: "while that write is in flight the next
+    /// unit waits one refresh"). Both reads are idempotent, so the second one is
+    /// what makes the reached level and the unlocked unit appear together, without a
+    /// pull-to-refresh (B4). A stable path costs one read.
     private func reload() async {
         guard auth.signedInUser != nil else { return }
+
+        await model.load()
+        guard !model.snapshot.pendingLevels.isEmpty else { return }
+
         await model.load()
     }
 }

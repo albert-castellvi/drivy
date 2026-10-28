@@ -207,3 +207,15 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
   detectado: en remoto existe `20261027125628 drivy_function_hardening`, que
   no está en `supabase/migrations/`. Primer CI del PR: la app compiló; un
   único error en un test (orden de argumentos), corregido.
+- **L13** (2026-10-28) CI en verde en `98d9c18` (573 tests). Usuario: «usa el
+  multiplexer de herdr con los agentes de pi»; los agentes de Pi pasan a lanzarse
+  en panes de herdr. QA (agente `qa`, Pi + 5 jueces glm5.3-flash, informe
+  `qa-report.md`): S2, S4, S6, S8 y S9 cumplen y el principio de seguridad se
+  mantiene. 5 bloqueadores: B1 (claves de día y semana con la zona horaria del
+  dispositivo frente a Madrid en el servidor; en Canarias, de 23:00 a 00:00,
+  se rechazan lecciones y se pierden misiones), B2 (la notificación de liga no
+  se silencia durante un trayecto), B3 (el orden resumen → paywall no tiene
+  test), B4 (Camino no se recarga y no registra niveles), B5 (el texto de la
+  lección promete sumar el día cuando ese día ya hubo conducción sucia).
+  Corrección: agentes `fix-tz` (B1, B2) y `fix-ui` (B3-B5) en paralelo con
+  superficies disjuntas.
