@@ -15,6 +15,7 @@ final class DriveRecorderTests: XCTestCase {
         let motion: FakeMotionSampler
         let detector: FakeConnectedModeDetector
         let uploader: FakeDriveUploader
+        let pendingStore: PendingDriveStore
     }
 
     private func makeSUT() -> SUT {
@@ -22,12 +23,14 @@ final class DriveRecorderTests: XCTestCase {
         let motion = FakeMotionSampler()
         let detector = FakeConnectedModeDetector()
         let uploader = FakeDriveUploader()
+        let pendingStore = PendingDriveStore(directory: Self.makePendingDirectory())
 
         let recorder = DriveRecorder(
             locationSampler: location,
             motionSampler: motion,
             connectedModeDetector: detector,
             uploader: uploader,
+            pendingStore: pendingStore,
             now: { DriveRecorderTests.startDate }
         )
         return SUT(
@@ -35,8 +38,16 @@ final class DriveRecorderTests: XCTestCase {
             location: location,
             motion: motion,
             detector: detector,
-            uploader: uploader
+            uploader: uploader,
+            pendingStore: pendingStore
         )
+    }
+
+    /// Fresh store directory per SUT, so no test sees another test's pending
+    /// records.
+    private static func makePendingDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("DriveRecorderTests-pending-\(UUID().uuidString)", isDirectory: true)
     }
 
     /// 1 km at 10 m/s with one harsh brake: 100 − 12 = 88 points.

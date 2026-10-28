@@ -19,6 +19,10 @@ import Foundation
 /// S2: when the drive stops, the route is handed to the engine so the finished
 /// summary carries where each counted event happened. Those events stay on the
 /// phone exactly like the route (S10, S12).
+///
+/// D4: every finished drive is persisted in `PendingDriveStore` before its
+/// upload and removed from it only when the upload succeeded, so a failed
+/// upload keeps the drive for `retryPendingUploads()` instead of losing it.
 @MainActor
 final class DriveRecorder: ObservableObject {
 
@@ -58,6 +62,7 @@ final class DriveRecorder: ObservableObject {
     private let motionSampler: MotionSampling
     private let connectedModeDetector: ConnectedModeDetecting
     private let uploader: DriveUploading
+    private let pendingStore: PendingDriveStore
     private let engine: ScoringEngine
     private let now: () -> Date
 
@@ -68,11 +73,16 @@ final class DriveRecorder: ObservableObject {
     private var motionOrigin: TimeInterval?
     private var phoneUseEvents = 0
 
+    /// D4: whether a `retryPendingUploads` drain is in flight, so two retries
+    /// never run at once.
+    private var isRetrying = false
+
     init(
         locationSampler: LocationSampling = CoreLocationSampler(),
         motionSampler: MotionSampling = CoreMotionSampler(),
         connectedModeDetector: ConnectedModeDetecting = AudioRouteConnectedModeDetector(),
         uploader: DriveUploading = SupabaseDriveRepository(),
+        pendingStore: PendingDriveStore = PendingDriveStore(),
         engine: ScoringEngine = ScoringEngine(),
         now: @escaping () -> Date = Date.init
     ) {
@@ -80,6 +90,7 @@ final class DriveRecorder: ObservableObject {
         self.motionSampler = motionSampler
         self.connectedModeDetector = connectedModeDetector
         self.uploader = uploader
+        self.pendingStore = pendingStore
         self.engine = engine
         self.now = now
     }
@@ -180,13 +191,67 @@ final class DriveRecorder: ObservableObject {
 
         isSaving = true
         do {
+            // D4: the session user is tagged onto the pending entry so a drive
+            // recorded by user A is never uploaded into user B's account. When
+            // the session cannot be resolved the entry is stored untagged and
+            // kept: it is never uploaded, but the drive is not lost either.
+            let sessionUserID = try? await uploader.currentSessionUserID()
+            // Persist before uploading; the entry is removed only when the
+            // whole upload (insert + daily score) succeeded.
+            try? pendingStore.add(
+                PendingDriveUpload(record: record, sessionUserID: sessionUserID)
+            )
+
             try await uploader.upload(record)
+            try? pendingStore.remove(id: record.id)
+
+            isSaving = false
+            // The connection just worked: drain any backlog left by earlier
+            // failures.
+            await retryPendingUploads()
         } catch {
-            // The summary stays in `lastCompletedDrive`; a retry queue is out of
-            // scope for the MVP (S10 only requires the summarized upload).
+            // The record stays in `pendingStore` (D4) and the summary stays in
+            // `lastCompletedDrive`; the next successful upload drains it.
             errorMessage = Self.uploadFailureMessage
+            isSaving = false
         }
-        isSaving = false
+    }
+
+    /// D4: uploads every pending drive, oldest first, and removes each one that
+    /// succeeds.
+    ///
+    /// The drain stops at the first failure (the failing record and everything
+    /// after it stay pending for the next attempt) and never runs twice at the
+    /// same time. It does not touch `isRecording` or the live samples: the drive
+    /// in progress is a separate record. A pending entry whose session user id
+    /// does not match the current session user is kept and skipped, never
+    /// uploaded into someone else's account.
+    ///
+    /// Called after a successful upload (so a backlog drains once the connection
+    /// works again) and from the Today screen when it appears.
+    func retryPendingUploads() async {
+        guard !isSaving, !isRetrying else { return }
+
+        isRetrying = true
+        defer { isRetrying = false }
+
+        // The owner check needs the session user; without one nothing can be
+        // verified, so nothing is uploaded.
+        guard let currentUserID = try? await uploader.currentSessionUserID() else { return }
+
+        for entry in pendingStore.all() {
+            guard let entryUserID = entry.sessionUserID, entryUserID == currentUserID else {
+                // Not this user's drive (or an untagged one): keep it.
+                continue
+            }
+
+            do {
+                try await uploader.upload(entry.record)
+                try? pendingStore.remove(id: entry.record.id)
+            } catch {
+                return
+            }
+        }
     }
 
     /// Best-effort "uso del móvil al volante" signal (S5).

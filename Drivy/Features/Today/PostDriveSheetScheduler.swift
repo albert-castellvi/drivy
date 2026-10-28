@@ -82,14 +82,57 @@ enum PostDriveSheetScheduler {
         /// paywall consumes the gate: the debrief never does (S2).
         let consumesPaywallGate: Bool
 
+        /// Sheet the tab owes the user once the one on screen closes, `nil` when it
+        /// owes nothing. The caller holds it until then; nothing here presents it.
+        let deferredSheet: TodaySheet?
+
+        init(
+            nextSheet: TodaySheet?,
+            consumesPaywallGate: Bool,
+            deferredSheet: TodaySheet? = nil
+        ) {
+            self.nextSheet = nextSheet
+            self.consumesPaywallGate = consumesPaywallGate
+            self.deferredSheet = deferredSheet
+        }
+
         /// Nothing to change on screen.
         static let stay = Step(nextSheet: nil, consumesPaywallGate: false)
     }
 
     /// S2: a finished drive always opens its post-drive summary first, and the
     /// paywall of S9 can only follow it once that sheet is closed.
-    static func driveDidComplete(_ drive: DriveRecord) -> Step {
-        Step(nextSheet: .debrief(drive), consumesPaywallGate: false)
+    ///
+    /// U3: with one exception, the lesson. Replacing it would dismiss a quiz whose
+    /// answers are held only in its view model until the user finishes it, so a
+    /// drive that ends while the lesson is open keeps the lesson on screen and
+    /// leaves the debrief owed (`deferredSheet`). Nothing else on screen holds state
+    /// like that, so the other sheets are replaced as before.
+    ///
+    /// - Parameter shownSheet: sheet of the tab right now, which the debrief would
+    ///   replace; `nil` when the tab shows no sheet.
+    static func driveDidComplete(_ drive: DriveRecord, shownSheet: TodaySheet? = nil) -> Step {
+        guard shownSheet != .lesson else {
+            return Step(nextSheet: nil, consumesPaywallGate: false, deferredSheet: .debrief(drive))
+        }
+
+        return Step(nextSheet: .debrief(drive), consumesPaywallGate: false)
+    }
+
+    /// S2/U3: what the tab shows once the sheet on screen has closed.
+    ///
+    /// The sheet still owed comes first: the debrief of a drive that ended during the
+    /// lesson precedes the S9 paywall, exactly as the debrief of a drive that ends
+    /// with nothing on screen does (L9).
+    ///
+    /// - Parameter deferred: sheet the tab owes, as returned by `driveDidComplete`.
+    /// - Parameter paywall: state of the S9 paywall at this moment.
+    static func afterSheetClosed(deferred: TodaySheet?, paywall: PaywallState) -> Step {
+        if let deferred {
+            return Step(nextSheet: deferred, consumesPaywallGate: false)
+        }
+
+        return paywallIfDue(shownSheet: nil, paywall: paywall)
     }
 
     /// S9: the paywall after the first drive, once ever, and only when no other

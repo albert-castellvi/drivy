@@ -1,6 +1,23 @@
 import SwiftUI
 import UIKit
 
+/// S5: the notification whose delivery counts as using the phone during a drive.
+///
+/// `willEnterForeground` and not `didBecomeActive`: both fire when the user comes
+/// back to the app, but only the first one starts in the background. A system alert
+/// — the app's own location permission prompt, Control Center, a notification pull —
+/// makes the app inactive and active again while it stays on screen, so
+/// `didBecomeActive` charged the first drive's own permission dialog as phone use.
+/// Locking the screen or switching apps does send the app to the background, so every
+/// real use of the phone still counts.
+///
+/// A value instead of an inline constant so the choice is one line to pin in a test.
+enum PhoneUseSignal {
+
+    /// The signal `TodayView` turns into `DriveRecorder.registerPhoneUseEvent()`.
+    static let notification: Notification.Name = UIApplication.willEnterForegroundNotification
+}
+
 /// Tab "Hoy" (S1, S4, S6, S5): the day as a stretch of road (mockup C).
 ///
 /// The header carries the date, the Driver Score of the day on a `KmPost`, and
@@ -36,6 +53,10 @@ struct TodayView: View {
 
     /// Bumped when a reload completes a new quest; drives the success haptic.
     @State private var questCompletedPulse = 0
+
+    /// Sheet the tab still owes once the one on screen closes (U3): the debrief of a
+    /// drive that ended while the lesson was being answered.
+    @State private var deferredSheet: TodaySheet?
 
     /// "Presented once ever" flag of the paywall (S9).
     private let paywallGate = FirstDrivePaywallGate()
@@ -75,7 +96,11 @@ struct TodayView: View {
             .background(Color.drivyPaper)
             .navigationTitle("Hoy")
             .refreshable { await reload() }
-            .task(id: auth.signedInUser?.id) { await reload() }
+            // D4: drives whose upload failed earlier are retried before the day is read.
+            .task(id: auth.signedInUser?.id) {
+                await recorder.retryPendingUploads()
+                await reload()
+            }
             // A finished drive is written to `drives` and `daily_scores` by the
             // upload, so the day is read again as soon as the recorder has it.
             // S9: a success haptic when a reload shows a newly completed quest.
@@ -115,11 +140,12 @@ struct TodayView: View {
                     LessonQuizView(onFinished: { _, _ in activeSheet = nil })
                 }
             }
-            // S5: coming back to the app during a drive means the phone was
-            // unlocked and used, which is the closest available phone-use signal.
-            .onReceive(
-                NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
-            ) { _ in
+            // S5: coming back to the app **from the background** during a drive means
+            // the phone was unlocked and used, which is the closest available
+            // phone-use signal. Becoming active is deliberately not the trigger: a
+            // system alert only makes the app inactive, so it would charge the drive
+            // for the app's own dialog (`PhoneUseSignal`).
+            .onReceive(NotificationCenter.default.publisher(for: PhoneUseSignal.notification)) { _ in
                 recorder.registerPhoneUseEvent()
             }
         }
@@ -226,6 +252,9 @@ struct TodayView: View {
     /// The post-drive summary (S2) comes first and the paywall waits for it: L9
     /// fixed the order debrief → paywall, two sheets cannot be on screen at the same
     /// time, and the order itself lives in `PostDriveSheetScheduler` so it is tested.
+    ///
+    /// U3: an open lesson is not replaced. Its quiz keeps the answers in memory until
+    /// the user finishes it, so the debrief waits for the lesson to close.
     private func handleCompletedDrive(_ drive: DriveRecord) {
         RouteHandoff.store(coordinates: recorder.routeCoordinates, startedAt: drive.startedAt)
 
@@ -233,8 +262,9 @@ struct TodayView: View {
         // profile is older. Done once per account.
         freemiumSession.recordCompletedDrive(startedAt: drive.startedAt)
 
-        let step = PostDriveSheetScheduler.driveDidComplete(drive)
-        activeSheet = step.nextSheet
+        let step = PostDriveSheetScheduler.driveDidComplete(drive, shownSheet: activeSheet)
+        deferredSheet = step.deferredSheet
+        apply(step)
 
         Task { await reload() }
     }
@@ -244,8 +274,17 @@ struct TodayView: View {
     /// It runs after the dismissal, so the S9 paywall that follows the debrief of a
     /// drive never races the animation, and the day is read again (the lesson, the
     /// repair and the quests all change what Hoy shows).
+    ///
+    /// U3: a debrief the tab owed while the lesson was open is what shows up here, and
+    /// the paywall still waits behind it (S2).
     private func sheetDidClose() {
-        presentPaywallIfNeeded()
+        let step = PostDriveSheetScheduler.afterSheetClosed(
+            deferred: deferredSheet,
+            paywall: paywallState
+        )
+        deferredSheet = nil
+        apply(step)
+
         Task { await reload() }
     }
 
@@ -256,7 +295,14 @@ struct TodayView: View {
     /// `PostDriveSheetScheduler`: this function only feeds it the gate's own state
     /// and applies the step it returns.
     private func presentPaywallIfNeeded() {
-        let paywall = PostDriveSheetScheduler.PaywallState(
+        // One sheet at a time: while the debrief or the lesson owns the screen the
+        // paywall waits, and it is offered again as soon as it closes.
+        apply(PostDriveSheetScheduler.paywallIfDue(shownSheet: activeSheet, paywall: paywallState))
+    }
+
+    /// What the tab knows about the S9 paywall right now.
+    private var paywallState: PostDriveSheetScheduler.PaywallState {
+        PostDriveSheetScheduler.PaywallState(
             // Only a drive finished in this session triggers the paywall: a plan that
             // arrives later (StoreKit is slow, or the user just purchased) must not
             // turn a launch into an ad for drives recorded days ago.
@@ -267,10 +313,11 @@ struct TodayView: View {
                 plan: freemium.plan
             )
         )
+    }
 
-        // One sheet at a time: while the debrief or the lesson owns the screen the
-        // paywall waits, and it is offered again as soon as it closes.
-        let step = PostDriveSheetScheduler.paywallIfDue(shownSheet: activeSheet, paywall: paywall)
+    /// Applies a step of the schedule: records the gate when only the paywall does it
+    /// and moves the tab to the sheet the step names, if any.
+    private func apply(_ step: PostDriveSheetScheduler.Step) {
         guard let nextSheet = step.nextSheet else { return }
 
         if step.consumesPaywallGate {

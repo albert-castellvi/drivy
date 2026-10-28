@@ -31,9 +31,17 @@ final class DriveRecorderEventsTests: XCTestCase {
             motionSampler: motion,
             connectedModeDetector: FakeConnectedModeDetector(),
             uploader: uploader,
+            pendingStore: PendingDriveStore(directory: Self.makePendingDirectory()),
             now: { DriveRecorderEventsTests.startDate }
         )
         return SUT(recorder: recorder, location: location, motion: motion, uploader: uploader)
+    }
+
+    /// Fresh store directory per SUT, so no test sees another test's pending
+    /// records.
+    private static func makePendingDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("DriveRecorderEventsTests-pending-\(UUID().uuidString)", isDirectory: true)
     }
 
     /// 1 km at 10 m/s with one harsh brake and the route of the same fixes.
