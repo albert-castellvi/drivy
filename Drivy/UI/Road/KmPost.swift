@@ -135,7 +135,7 @@ struct KmPostValue: View {
         Text(value)
             .font(.drivyDisplay)
             .monospacedDigit()
-            .foregroundStyle(Color.drivyInk)
+            .foregroundStyle(Color.drivySignGlyph)  // the post face is a sign: light in both modes
             .lineLimit(1)
             .minimumScaleFactor(0.5)
     }
