@@ -64,3 +64,9 @@ Rama `fix/security-hardening`. Entrega: un PR. Tests: `supabase/tests` (PGlite) 
   fallos sin lock, nombres con espacios guardados sin recortar (el cliente recorta). Sondas en
   `supabase/tests/security.test.mjs`, 43/43; tests en serie por memoria (PGlite ~3 GB por
   fichero).
+- **L6** (2026-10-28) Usuario: «si, aplica y avisa cuando termine el CI y dejamos ya
+  estabilizado en main para seguir añadiendo features». CI de `eac1417` en verde. Migración
+  aplicada en thsqgdaadhnnwsadjhrj como `20261028111321 security_hardening`
+  (`{"success":true}`); fichero renombrado a esa versión. Verificación de solo lectura: 0
+  permisos de `anon` en tablas, RPC con `is_me` y sin uuids, el único perfil con seudónimo,
+  restricción de longitud presente, `my_xp` correcto como `authenticated`.

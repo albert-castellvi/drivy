@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The server owns the final word: `profiles_display_name_length` is
 /// `char_length(btrim(display_name)) between 1 and 30`
-/// (`supabase/migrations/20261028120000_security_hardening.sql`). The client
+/// (`supabase/migrations/20261028111321_security_hardening.sql`). The client
 /// trims the same way before measuring, so a field never triggers a database
 /// error the user cannot read.
 enum DisplayNameRule {

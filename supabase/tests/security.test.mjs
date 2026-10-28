@@ -1,5 +1,5 @@
 // Independent verifier probes for PR #11 (fix/security-hardening), migration
-// 20261028120000_security_hardening.sql and odd/tasks/security-hardening.md
+// 20261028111321_security_hardening.sql and odd/tasks/security-hardening.md
 // S2, S3, S7, written by the independent verifier and kept as regression tests
 // (its blocker and three probes were flipped to the fixed behaviour, L5).
 
@@ -13,7 +13,7 @@ const migrationsDir = new URL('../migrations/', import.meta.url);
 const migrations = readdirSync(migrationsDir)
   .filter((f) => f.endsWith('.sql'))
   .sort();
-const HARDENING = '20261028120000_security_hardening.sql';
+const HARDENING = '20261028111321_security_hardening.sql';
 
 const supabaseStub = `
   create role anon nologin;
