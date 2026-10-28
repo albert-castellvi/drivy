@@ -14,7 +14,7 @@ final class PendingDriveStoreTests: XCTestCase {
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("PendingDriveStoreTests-\(UUID().uuidString)", isDirectory: true)
         addTeardownBlock {
-            try? FileManager.default.removeItem(at: directory)
+            try? FileManager.default.removeItem(at: self.directory)
         }
     }
 

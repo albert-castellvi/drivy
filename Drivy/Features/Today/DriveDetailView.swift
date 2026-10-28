@@ -13,6 +13,11 @@ import SwiftUI
 /// tell-tales, and the events as a rule-divided list of road signs — no cards.
 struct DriveDetailView: View {
 
+    /// U2: the note that explains the waived phone penalty of a connected drive.
+    /// It is user copy, so it lives in one place where a test can pin it: a
+    /// specification id is never part of a string the driver reads.
+    static let connectedModeNote = "Conducción conectada: el uso del móvil no penaliza."
+
     let drive: DriveHistoryRow
 
     private var track: DriveTrack? {
@@ -125,7 +130,7 @@ struct DriveDetailView: View {
             if drive.connectedMode {
                 DriveHairlineRule().padding(.vertical, 6)
 
-                Text("Conducción conectada: el uso del móvil no penaliza.")
+                Text(Self.connectedModeNote)
                     .font(.drivyFootnote)
                     .foregroundStyle(Color.drivyInkMuted)
                     .fixedSize(horizontal: false, vertical: true)

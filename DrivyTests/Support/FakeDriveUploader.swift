@@ -11,6 +11,11 @@ final class FakeDriveUploader: DriveUploading {
 
     private(set) var uploadedRecords: [DriveRecord] = []
 
+    /// Every drive whose upload was attempted, in call order, including the ones
+    /// that failed (D4). `uploadedRecords` only keeps the successes, so the order
+    /// of a drain is only observable here.
+    private(set) var attemptedIDs: [UUID] = []
+
     /// Error thrown by every upload while set.
     var error: Error?
 
@@ -28,6 +33,7 @@ final class FakeDriveUploader: DriveUploading {
     var failingIDs: Set<UUID> = []
 
     func upload(_ record: DriveRecord) async throws {
+        attemptedIDs.append(record.id)
         if let error {
             throw error
         }

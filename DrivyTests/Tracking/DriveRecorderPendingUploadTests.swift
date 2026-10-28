@@ -22,13 +22,20 @@ final class DriveRecorderPendingUploadTests: XCTestCase {
     private func makeSUT() -> SUT {
         let location = FakeLocationSampler()
         let motion = FakeMotionSampler()
+        let detector = FakeConnectedModeDetector()
         let uploader = FakeDriveUploader()
         let store = PendingDriveStore(
             directory: FileManager.default.temporaryDirectory
                 .appendingPathComponent("DriveRecorderPendingTests-\(UUID().uuidString)", isDirectory: true)
         )
 
+        // Every sensor is a fake: the recorder must never touch the live
+        // samplers from a test (they prompt for permissions and never emit the
+        // samples the tests push through the fakes).
         let recorder = DriveRecorder(
+            locationSampler: location,
+            motionSampler: motion,
+            connectedModeDetector: detector,
             uploader: uploader,
             pendingStore: store,
             now: { Self.startDate }
@@ -104,7 +111,11 @@ final class DriveRecorderPendingUploadTests: XCTestCase {
 
         await sut.recorder.retryPendingUploads()
 
-        XCTAssertEqual(sut.uploader.uploadedRecords.map(\.id), [oldest.id, middle.id])
+        // Oldest first, and it stops at the failing drive: the newest is never
+        // attempted. `uploadedRecords` only keeps successes, so the order is read
+        // from the attempted ids.
+        XCTAssertEqual(sut.uploader.attemptedIDs, [oldest.id, middle.id])
+        XCTAssertEqual(sut.uploader.uploadedRecords.map(\.id), [oldest.id])
         XCTAssertFalse(sut.store.contains(id: oldest.id))
         XCTAssertTrue(sut.store.contains(id: middle.id))
         XCTAssertTrue(sut.store.contains(id: newest.id))
