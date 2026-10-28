@@ -106,6 +106,8 @@ struct HistoryView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            // Filled with the sign blue: the light dark-mode tint is for text, not fills.
+            .tint(Color.drivySignBlue)
         }
         .padding(.vertical, 4)
     }

@@ -45,6 +45,8 @@ struct PublicLeagueInvitationCard: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                // Filled with the sign blue: the light dark-mode tint is for text, not fills.
+                .tint(Color.drivySignBlue)
                 .disabled(model.isSubmitting)
 
                 Button {
@@ -271,6 +273,8 @@ struct LeagueStandingsRow: View {
                 Rectangle()
                     .fill(Color.drivyTint)
                     .frame(width: 3)
+                    // In the row's leading inset, clear of the position digits.
+                    .offset(x: -10)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(Self.ownRowLabel)
             }

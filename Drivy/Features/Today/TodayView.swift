@@ -171,6 +171,8 @@ struct TodayView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
+                    // Filled with the sign blue: the light dark-mode tint is for text, not fills.
+                    .tint(Color.drivySignBlue)
 
                 case .coolingDown(_):
                     Text(PaywallCopy.streakRepairCoolingDownMessage)
@@ -528,9 +530,9 @@ struct TodayRoadView: View {
             RoadTimeline(isMoving: road.now.isRecording) {
                 ForEach(road.ahead) { stop in
                     if stop.role == .lesson {
-                        lessonStop(stop)
+                        lessonStop(stop, showsKicker: stop.id == road.ahead.first?.id)
                     } else {
-                        aheadStop(stop)
+                        aheadStop(stop, showsKicker: stop.id == road.ahead.first?.id)
                     }
                 }
 
@@ -589,12 +591,15 @@ struct TodayRoadView: View {
     // MARK: - Stops
 
     /// A pending quest ahead: its sign, its title, what it asks for.
-    private func aheadStop(_ stop: TodayRoad.AheadStop) -> some View {
+    /// Only the first stop ahead carries the «Por delante» kicker.
+    private func aheadStop(_ stop: TodayRoad.AheadStop, showsKicker: Bool) -> some View {
         RoadStop(sign: stop.sign) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Por delante")
-                    .font(.drivyKicker)
-                    .foregroundStyle(Color.drivyInkMuted)
+                if showsKicker {
+                    Text("Por delante")
+                        .font(.drivyKicker)
+                        .foregroundStyle(Color.drivyInkMuted)
+                }
 
                 Text(stop.title)
                     .font(.drivyHeadline)
@@ -610,12 +615,14 @@ struct TodayRoadView: View {
 
     /// The lesson ahead, with the action that opens it. The stop owns a control,
     /// so its text is not combined into the button's element.
-    private func lessonStop(_ stop: TodayRoad.AheadStop) -> some View {
+    private func lessonStop(_ stop: TodayRoad.AheadStop, showsKicker: Bool) -> some View {
         RoadStop(sign: stop.sign, combinesText: false) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Por delante")
-                    .font(.drivyKicker)
-                    .foregroundStyle(Color.drivyInkMuted)
+                if showsKicker {
+                    Text("Por delante")
+                        .font(.drivyKicker)
+                        .foregroundStyle(Color.drivyInkMuted)
+                }
 
                 Text(stop.title)
                     .font(.drivyHeadline)

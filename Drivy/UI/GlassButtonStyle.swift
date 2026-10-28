@@ -18,10 +18,12 @@ extension View {
     /// Primary action: `.glassProminent` on iOS 26, `.borderedProminent` before.
     @ViewBuilder
     func glassProminentOrBorderedProminent() -> some View {
+        // Filled with the sign blue in both modes: the dark-mode tint is a light
+        // blue meant for text, and white on it fails contrast.
         if #available(iOS 26, *) {
-            self.buttonStyle(.glassProminent)
+            self.buttonStyle(.glassProminent).tint(Color.drivySignBlue)
         } else {
-            self.buttonStyle(.borderedProminent)
+            self.buttonStyle(.borderedProminent).tint(Color.drivySignBlue)
         }
     }
 }

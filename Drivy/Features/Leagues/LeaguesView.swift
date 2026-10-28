@@ -154,6 +154,8 @@ struct LeaguesView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                // Filled with the sign blue: the light dark-mode tint is for text, not fills.
+                .tint(Color.drivySignBlue)
                 .disabled(model.isJoining)
 
                 if let joinErrorMessage = model.joinErrorMessage {
