@@ -30,6 +30,15 @@
 	<string>Drivy usa tu ubicación solo mientras registras un trayecto: tú lo inicias y tú lo paras, y con las muestras de GPS calcula la distancia y tu Driver Score. Las muestras se quedan en tu iPhone.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Drivy usa el sensor de movimiento para detectar frenadas y aceleraciones bruscas y puntuar tu conducción.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Barlow-Regular.ttf</string>
+		<string>Barlow-Medium.ttf</string>
+		<string>Barlow-SemiBold.ttf</string>
+		<string>Barlow-Bold.ttf</string>
+		<string>BarlowCondensed-SemiBold.ttf</string>
+		<string>BarlowCondensed-Bold.ttf</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

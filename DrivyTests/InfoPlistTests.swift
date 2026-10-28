@@ -78,6 +78,30 @@ final class InfoPlistTests: XCTestCase {
         XCTAssertEqual(info["UIBackgroundModes"] as? [String], ["location"])
     }
 
+    // MARK: - Bundled type (S3)
+
+    /// S3: the Barlow faces of the design system ship inside the app bundle and are
+    /// registered through `UIAppFonts`. Without the key the files are copied but
+    /// never loaded, and every role would silently fall back to the system font.
+    func testAppFontsListsEveryBundledFace() throws {
+        let info = try infoPlist()
+        let fonts = try XCTUnwrap(
+            info["UIAppFonts"] as? [String],
+            "UIAppFonts is missing from Info.plist: the bundled Barlow faces would never load"
+        )
+
+        XCTAssertEqual(
+            fonts.count,
+            DrivyFontName.bundledFiles.count,
+            "UIAppFonts must list exactly the \(DrivyFontName.bundledFiles.count) faces of DrivyFontName.bundledFiles, got \(fonts)"
+        )
+        XCTAssertEqual(
+            fonts.sorted(),
+            DrivyFontName.bundledFiles.sorted(),
+            "UIAppFonts does not match the bundled files of the design system"
+        )
+    }
+
     // MARK: - Existing identity (S14), untouched by this change
 
     func testAppIdentityKeysAreStillDeclared() throws {

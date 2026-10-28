@@ -2,14 +2,21 @@ import SwiftUI
 
 extension View {
 
-    /// Card look shared by the MVP screens: same shape and padding as
-    /// `PlaceholderCard`, so the placeholders and the real content line up.
+    /// Card look shared by the MVP screens: the raised paper of S3 with a 1 px
+    /// rule, radius 12. No fill anywhere else — a screen that needs separation
+    /// uses proximity or a rule before it uses a card (S3).
+    ///
+    /// The same shape and padding as `PlaceholderCard`, so the placeholders and
+    /// the real content line up.
     func drivyCard() -> some View {
-        self.frame(maxWidth: .infinity, alignment: .leading)
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+        return self.frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.quaternary)
+                shape
+                    .fill(Color.drivyPaperRaised)
+                    .overlay(shape.stroke(Color.drivyRule, lineWidth: 1))
             )
     }
 }
