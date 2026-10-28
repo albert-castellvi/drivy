@@ -406,6 +406,7 @@ struct TodayHeader: View {
 
 /// The plain values the «Ahora» stop renders, built by `TodayView` from the
 /// recorder so the stop (and the gallery) never needs the recorder itself.
+@MainActor
 struct TodayNowValues {
 
     /// «Trayecto en curso» / «Registrar trayecto» / «Último trayecto».
