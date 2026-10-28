@@ -9,7 +9,8 @@ struct LeagueRecord: Decodable, Equatable, Identifiable {
 
     let ownerID: String
 
-    /// Code a friend types (or receives in the invite link) to join.
+    /// Eight-symbol code a friend types (or receives in the invite link) to join.
+    /// It is drawn by `public.create_league` on the server (S3).
     let inviteCode: String
 
     enum CodingKeys: String, CodingKey {
@@ -32,34 +33,41 @@ struct LeagueRecord: Decodable, Equatable, Identifiable {
 /// Private leagues now rank by weekly XP, exactly like the public ones: the old
 /// distance-weighted score and the kilometres are gone, because any ranking that
 /// grows with the distance driven invites the user to drive more (S4).
+///
+/// The RPC no longer returns the member's uuid: it marks the caller's own row
+/// with `is_me` instead, so a member of the league cannot learn who else is in it
+/// (S2).
 struct LeagueRankingRow: Decodable, Equatable, Identifiable {
 
     let rank: Int
-
-    let userID: String
 
     let displayName: String
 
     /// XP earned inside the week the RPC was asked about (S4).
     let weekXP: Int
 
-    var id: String { userID }
+    /// True only on the caller's row (S2), which is what the view highlights.
+    let isMe: Bool
+
+    /// Stable identity of the row for `ForEach`: the rank plus the visible name,
+    /// the only two values the payload still carries (S2).
+    var id: String { "\(rank)-\(displayName)" }
 
     /// What the row shows on its trailing side.
     var xpText: String { LeagueXPText.format(weekXP) }
 
     enum CodingKeys: String, CodingKey {
         case rank
-        case userID = "user_id"
         case displayName = "display_name"
         case weekXP = "week_xp"
+        case isMe = "is_me"
     }
 
-    init(rank: Int, userID: String, displayName: String, weekXP: Int) {
+    init(rank: Int, displayName: String, weekXP: Int, isMe: Bool) {
         self.rank = rank
-        self.userID = userID
         self.displayName = displayName
         self.weekXP = weekXP
+        self.isMe = isMe
     }
 
     init(from decoder: Decoder) throws {
@@ -68,9 +76,9 @@ struct LeagueRankingRow: Decodable, Equatable, Identifiable {
         // `rank` and `week_xp` are bigints, which PostgREST may serialize as
         // numbers or as strings.
         rank = try container.decodeInteger(forKey: .rank)
-        userID = try container.decode(String.self, forKey: .userID)
         displayName = try container.decode(String.self, forKey: .displayName)
         weekXP = try container.decodeInteger(forKey: .weekXP)
+        isMe = try container.decode(Bool.self, forKey: .isMe)
     }
 }
 
@@ -86,37 +94,34 @@ enum LeagueXPText {
     }
 }
 
-/// Invite code of a league (S7).
+/// Invite code of a league (S3).
 ///
-/// Six characters that get typed by hand or read from a screenshot, so the
-/// alphabet leaves out the glyphs that get confused: I/1 and O/0.
+/// Eight symbols that get typed by hand or read from a screenshot, so the
+/// alphabet leaves out the glyphs that get confused: I/1 and O/0. The code is
+/// drawn on the server by `public.create_league` (S3); the client only normalizes
+/// and validates what the user pastes, because generating it here would let a
+/// client pick a guessable one.
 enum LeagueInviteCode {
 
-    static let length = 6
+    static let length = 8
 
+    /// Every symbol a code can contain, in the server's alphabet. Kept client-side
+    /// only to reject impossible input before it spends one of the ten attempts
+    /// allowed per hour (S3).
     static let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
-
-    /// `randomIndex` is injected so a test can pin the injected code exactly.
-    static func generate(
-        randomIndex: (Int) -> Int = { limit in Int.random(in: 0..<limit) }
-    ) -> String {
-        var code = ""
-        code.reserveCapacity(length)
-
-        for _ in 0..<length {
-            let raw = randomIndex(alphabet.count)
-            let index = min(max(raw, 0), alphabet.count - 1)
-            code.append(alphabet[index])
-        }
-
-        return code
-    }
 
     /// User input arrives lowercase, with spaces, or pasted from a message.
     /// Only whitespace is stripped: a truly invalid character stays in the string
     /// so validation can reject the code instead of silently changing it.
     static func normalize(_ raw: String) -> String {
         raw.uppercased().filter { !$0.isWhitespace && !$0.isNewline }
+    }
+
+    /// Whether the normalized input can be a code at all: exactly `length`
+    /// symbols of the alphabet (S3). A code outside it cannot exist, so asking the
+    /// server would only burn one attempt of the hourly budget.
+    static func isValid(_ code: String) -> Bool {
+        code.count == length && code.allSatisfy { alphabet.contains($0) }
     }
 }
 

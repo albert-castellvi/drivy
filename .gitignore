@@ -23,3 +23,19 @@ Packages/
 
 # Supabase SQL tests (supabase/tests)
 node_modules/
+
+# Signing material and build products (never commit)
+.env
+.env.*
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+*.ipa
+*.xcarchive
+*.dSYM
+*.dSYM.zip
+*.log
+scratch/
+.atl/

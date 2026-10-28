@@ -48,7 +48,6 @@ struct LeaguesView: View {
                 case .createLeague:
                     CreateLeagueSheet(
                         model: model,
-                        userID: signedInUserID,
                         access: freemium.access
                     )
                 case .paywall:
@@ -74,10 +73,7 @@ struct LeaguesView: View {
         case .undecided:
             PublicLeagueInvitationCard(model: publicLeague)
         case .optedIn:
-            PublicLeaguePanel(
-                model: publicLeague,
-                currentUserID: auth.signedInUser?.id
-            )
+            PublicLeaguePanel(model: publicLeague)
         case .optedOut:
             EmptyView()
         }
@@ -141,7 +137,7 @@ struct LeaguesView: View {
         } header: {
             Text("Unirse")
         } footer: {
-            Text("Pega el código de 6 caracteres o el enlace que te hayan enviado.")
+            Text("Pega el código de 8 caracteres o el enlace que te hayan enviado.")
         }
     }
 
@@ -185,10 +181,6 @@ struct LeaguesView: View {
 
     // MARK: - Data
 
-    private var signedInUserID: String {
-        auth.signedInUser?.id ?? ""
-    }
-
     private func reload() async {
         guard let userID = auth.signedInUser?.id else { return }
         await publicLeague.load()
@@ -211,12 +203,11 @@ struct LeaguesView: View {
     }
 }
 
-/// Sheet that creates a league: a name, and the invite code is generated.
+/// Sheet that creates a league: only the name is typed. The invite code and the
+/// owner membership are made by `public.create_league` on the server (S3).
 private struct CreateLeagueSheet: View {
 
     @ObservedObject var model: LeaguesViewModel
-
-    let userID: String
 
     /// S9 snapshot, passed through so the sheet gates with the same rules as the tab.
     let access: FreemiumAccess?
@@ -237,7 +228,7 @@ private struct CreateLeagueSheet: View {
                             .foregroundStyle(.red)
                     }
                 } footer: {
-                    Text("Te daremos un código de 6 caracteres para invitar a tus amigos.")
+                    Text("Te daremos un código de 8 caracteres para invitar a tus amigos.")
                 }
             }
             .navigationTitle("Nueva liga")
@@ -251,7 +242,6 @@ private struct CreateLeagueSheet: View {
                         Task {
                             let created = await model.createLeague(
                                 name: name,
-                                userID: userID,
                                 access: access
                             )
                             if created {

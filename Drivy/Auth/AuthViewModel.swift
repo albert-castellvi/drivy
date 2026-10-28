@@ -18,6 +18,7 @@ final class AuthViewModel: ObservableObject {
     private let authService: AuthServicing
     private let appleSignInProvider: AppleSignInProviding
     /// Crash reporting, injected so tests can assert what was reported (S4).
+    /// It only ever receives a `CrashReport`, never the upstream error (S5).
     private let reportError: (Error) -> Void
     private let setReportedUser: (String?) -> Void
     private var didRestoreSession = false
@@ -75,7 +76,7 @@ final class AuthViewModel: ObservableObject {
             // reporting: the user did exactly what they meant to.
             state = .signedOut
         } catch {
-            reportError(error)
+            reportError(Self.reportedFailure(for: error))
             state = .failed(message: Self.signInFailureMessage)
         }
     }
@@ -86,8 +87,23 @@ final class AuthViewModel: ObservableObject {
             state = .signedOut
             setReportedUser(nil)
         } catch {
-            reportError(error)
+            reportError(CrashReport.authSignOutFailed)
             state = .failed(message: Self.signOutFailureMessage)
         }
+    }
+
+    // MARK: - Crash reporting (S5)
+
+    /// Sanitized code of a failed sign-in.
+    ///
+    /// The Apple sheet and the token exchange are told apart because they fail
+    /// for different reasons on the dashboard, but neither the `AuthError` nor
+    /// the `ASAuthorizationError` description is forwarded: both can name the
+    /// account or the raw response body.
+    private static func reportedFailure(for error: Error) -> CrashReport {
+        if error is AppleSignInError {
+            return .appleSignInFailed
+        }
+        return .authSignInFailed
     }
 }

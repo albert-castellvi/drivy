@@ -51,6 +51,13 @@ struct RootView: View {
         }
     }
 
+    /// Keeps the freemium session in sync with the auth state.
+    ///
+    /// A state without a user tears the session down, and that is correct even
+    /// when sign-out failed: supabase-swift removes the local session *before* it
+    /// asks the server (`AuthClient.signOut`, v2.55.5), so a thrown error still
+    /// leaves the device signed out. The traces of that account (the first-drive
+    /// anchor and the routes of the launch, S6) then belong to nobody.
     private func syncFreemiumSession() async {
         guard let user = auth.signedInUser else {
             freemiumSession.signOut()

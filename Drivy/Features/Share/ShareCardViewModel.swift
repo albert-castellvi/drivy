@@ -72,6 +72,9 @@ final class ShareCardViewModel: ObservableObject {
 
     /// Weekly position of the user in their first league (S7). A failing ranking
     /// only drops the position: the card is still worth sharing.
+    ///
+    /// The row is found through `is_me`, which the RPC computes server-side (S2):
+    /// the client no longer receives anybody's uuid to compare against.
     private func leaguePosition(userID: String) async -> LeaguePosition? {
         guard let league = (try? await leaguesRepository.leagues(userID: userID))?.first else {
             return nil
@@ -83,7 +86,7 @@ final class ShareCardViewModel: ObservableObject {
                 leagueID: league.id,
                 weekStart: weekStart
             ),
-            let mine = rows.first(where: { $0.userID == userID })
+            let mine = rows.first(where: \.isMe)
         else {
             return nil
         }

@@ -62,9 +62,12 @@
 #        provisioningProfiles, uploadSymbols);
 #     6. (S5) upload the archive's dSYMs to Sentry so Release crashes are
 #        symbolicated. Needs the SENTRY_AUTH_TOKEN secret; without it the step
-#        prints a warning and exits 0, so a missing token never fails the build;
+#        prints a warning and exits 0, so a missing token never fails the build.
+#        (S8 / F-01) sentry-cli comes from a pinned, checksum-verified release
+#        asset, never from `curl | bash`;
 #     7. `xcrun altool --upload-app -t ios` against TestFlight. A failing upload
-#        fails the job and prints the full altool log;
+#        fails the job and prints the last 80 lines of the altool log (S8 /
+#        F-05): the log is never dumped in full to a public run;
 #     8. the temporary job keychain is deleted.
 #
 #   Why manual signing: automatic cloud signing failed on this team with
@@ -134,7 +137,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Show toolchain versions
         run: |
@@ -165,7 +168,7 @@ jobs:
           PY
 
       - name: Cache Swift Package Manager checkouts
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
@@ -205,7 +208,7 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: test-results
           path: |
@@ -244,7 +247,7 @@ jobs:
       ASC_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Show toolchain versions
         run: xcodebuild -version
@@ -266,7 +269,7 @@ jobs:
           PY
 
       - name: Cache Swift Package Manager checkouts
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
@@ -463,23 +466,43 @@ jobs:
         continue-on-error: true
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          # (S8 / F-01) sentry-cli is installed from a pinned, checksum-verified
+          # release. Never `curl | bash` here: this step runs in the job that
+          # holds the App Store Connect .p8 and the distribution keychain, so a
+          # third party must not be able to choose which code runs.
+          #
+          # To update both values:
+          #   gh release view --repo getsentry/sentry-cli --json tagName
+          #   gh api repos/getsentry/sentry-cli/releases/tags/<tag> \
+          #     --jq '.assets[] | select(.name=="sentry-cli-Darwin-universal") | .digest'
+          # (or download the asset once and run
+          #  `shasum -a 256 sentry-cli-Darwin-universal`).
+          SENTRY_CLI_VERSION: "3.8.2"
+          SENTRY_CLI_SHA256: "2d1b118fa46960ba5e8e0cca9a6e197366905776a0ddc5a89c7d05a3908b77db"
         run: |
           set -o pipefail
           if [ -z "$SENTRY_AUTH_TOKEN" ]; then
             echo "::warning::SENTRY_AUTH_TOKEN not set; skipping dSYM upload"
             exit 0
           fi
-          # The official installer puts sentry-cli on PATH (and falls back to
-          # ./bin), so both locations are resolved before giving up.
-          curl -sL https://sentry.io/get-cli/ | bash
-          cli="$(command -v sentry-cli || true)"
-          if [ -z "$cli" ] && [ -x "$PWD/bin/sentry-cli" ]; then
-            cli="$PWD/bin/sentry-cli"
-          fi
-          if [ -z "$cli" ]; then
-            echo "::warning::sentry-cli could not be installed; skipping dSYM upload"
+          cli="$RUNNER_TEMP/sentry-cli"
+          url="https://github.com/getsentry/sentry-cli/releases/download/${SENTRY_CLI_VERSION}/sentry-cli-Darwin-universal"
+          echo "Installing sentry-cli $SENTRY_CLI_VERSION from $url"
+          # --fail: a 404 must not be written to disk as if it were the binary.
+          # A download outage only costs symbolication, so it skips the step like
+          # a missing token does. A checksum mismatch below fails this step and
+          # the binary never runs; continue-on-error keeps the TestFlight upload
+          # going and the run shows the failure.
+          if ! curl -sSL --fail -o "$cli" "$url"; then
+            echo "::warning::sentry-cli download failed ($url); skipping dSYM upload"
             exit 0
           fi
+          if ! printf '%s  %s\n' "$SENTRY_CLI_SHA256" "$cli" | shasum -a 256 -c -; then
+            echo "::error::sentry-cli checksum mismatch against $url — refusing to run an unverified binary"
+            exit 1
+          fi
+          chmod +x "$cli"
+          "$cli" --version
           "$cli" debug-files upload \
             --org acr-studio \
             --project drivy \
@@ -488,7 +511,7 @@ jobs:
 
       # altool is still Apple's supported CLI upload path for iOS binaries with
       # an App Store Connect API key. Any failure here — including Apple-side
-      # processing rejections — fails the job and dumps the full log.
+      # processing rejections — fails the job and prints the tail of the log.
       - name: Upload to TestFlight
         if: steps.signing.outputs.signed == 'true'
         run: |
@@ -513,8 +536,11 @@ jobs:
             fi
           else
             status=$?
-            echo "::error::TestFlight upload failed (altool exit $status). Full log follows."
-            cat "$log"
+            echo "::error::TestFlight upload failed (altool exit $status). Last 80 log lines follow."
+            # Bounded on purpose (S8 / F-05): GitHub masking matches stored
+            # values exactly, so an unbounded dump of a log that ever derives a
+            # credential would publish it to a public run log.
+            tail -n 80 "$log"
             exit "$status"
           fi
           {

@@ -43,17 +43,17 @@ final class PublicLeagueViewModelTests: XCTestCase {
 
     private func row(
         _ place: Int,
-        _ userID: String,
         _ name: String,
         xp: Int = 100,
-        zone: PublicLeagueZone? = nil
+        zone: PublicLeagueZone? = nil,
+        isMe: Bool = false
     ) -> PublicLeagueRankingRow {
         PublicLeagueRankingRow(
             place: place,
-            userID: userID,
             displayName: name,
             weekXP: xp,
-            zone: zone
+            zone: zone,
+            isMe: isMe
         )
     }
 
@@ -91,8 +91,8 @@ final class PublicLeagueViewModelTests: XCTestCase {
         fake.publicLeagueStatusResult = .success(PublicLeagueStatus(division: 2, optedIn: true))
         fake.currentPublicLeagueOutcome = .success(Self.current())
         fake.publicLeagueRankingOutcome = .success([
-            row(1, "user-a", "Ana", xp: 210, zone: .promotion),
-            row(2, "user-b", "Bruno", xp: 90)
+            row(1, "Ana", xp: 210, zone: .promotion, isMe: true),
+            row(2, "Bruno", xp: 90)
         ])
 
         await sut.load()
@@ -105,6 +105,22 @@ final class PublicLeagueViewModelTests: XCTestCase {
         XCTAssertEqual(sut.divisionTitle, "División 2 · Plata")
         XCTAssertNil(sut.errorMessage)
         XCTAssertEqual(fake.publicLeagueRankingCallCount, 1)
+    }
+
+    /// S2: the standings mark the caller's row from the payload (`is_me`); no uuid
+    /// reaches the client, so nothing else could be used to highlight it.
+    func testTheStandingsKeepTheServersMarkOfTheOwnRow() async {
+        let (sut, fake) = makeSUT()
+        fake.publicLeagueStatusResult = .success(PublicLeagueStatus(division: 2, optedIn: true))
+        fake.currentPublicLeagueOutcome = .success(Self.current())
+        fake.publicLeagueRankingOutcome = .success([
+            row(1, "Bruno", xp: 210),
+            row(2, "Ana", xp: 90, isMe: true)
+        ])
+
+        await sut.load()
+
+        XCTAssertEqual(sut.ranking.filter(\.isMe).map(\.displayName), ["Ana"])
     }
 
     func testTheDaysLeftComeFromTheInjectedClock() async {
@@ -166,7 +182,7 @@ final class PublicLeagueViewModelTests: XCTestCase {
     func testJoinStoresTheOptInAndLoadsTheGroup() async {
         let (sut, fake) = makeSUT()
         fake.currentPublicLeagueOutcome = .success(Self.current())
-        fake.publicLeagueRankingOutcome = .success([row(1, "user-a", "Ana")])
+        fake.publicLeagueRankingOutcome = .success([row(1, "Ana", isMe: true)])
 
         let joined = await sut.join()
 
@@ -214,7 +230,7 @@ final class PublicLeagueViewModelTests: XCTestCase {
         let (sut, fake) = makeSUT()
         fake.publicLeagueStatusResult = .success(PublicLeagueStatus(division: 2, optedIn: true))
         fake.currentPublicLeagueOutcome = .success(Self.current())
-        fake.publicLeagueRankingOutcome = .success([row(1, "user-a", "Ana")])
+        fake.publicLeagueRankingOutcome = .success([row(1, "Ana", isMe: true)])
 
         await sut.load()
         let declined = await sut.decline()

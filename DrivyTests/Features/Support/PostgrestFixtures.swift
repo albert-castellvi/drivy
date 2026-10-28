@@ -41,18 +41,19 @@ enum PostgrestFixtures {
       "id": "1c2d3e4f-1111-4222-8333-944455556666",
       "name": "Los del barrio",
       "owner_id": "11111111-2222-3333-4444-555555555555",
-      "invite_code": "ABC234"
+      "invite_code": "ABC23456"
     }
     """
 
     /// `public.league_weekly_ranking(...)` row (S5): `rank` and `week_xp` are
-    /// bigints, so both can arrive as strings.
+    /// bigints, so both can arrive as strings. It carries no uuid any more, only
+    /// the `is_me` mark of the caller's row (S2).
     static let rankingRowJSON = """
     {
       "rank": "1",
-      "user_id": "11111111-2222-3333-4444-555555555555",
       "display_name": "Ana",
-      "week_xp": "180"
+      "week_xp": "180",
+      "is_me": true
     }
     """
 
@@ -73,25 +74,28 @@ enum PostgrestFixtures {
     }
     """
 
-    /// `public.public_league_ranking()` row (S5) inside the promotion band.
+    /// `public.public_league_ranking()` row (S5) inside the promotion band. The
+    /// earlier `user_id` column is gone: the server marks the caller's row with
+    /// `is_me` instead of exposing every member's uuid (S2).
     static let publicLeagueRankingRowJSON = """
     {
       "place": "3",
-      "user_id": "11111111-2222-3333-4444-555555555555",
       "display_name": "Ana",
       "week_xp": "120",
-      "zone": "promotion"
+      "zone": "promotion",
+      "is_me": true
     }
     """
 
-    /// Same row outside both bands: `zone` is SQL `null`.
+    /// Same row outside both bands and belonging to somebody else: `zone` is SQL
+    /// `null` and `is_me` is false.
     static let publicLeagueRankingRowWithoutZoneJSON = """
     {
       "place": 9,
-      "user_id": "22222222-3333-4444-5555-666666666666",
       "display_name": "Bruno",
       "week_xp": 40,
-      "zone": null
+      "zone": null,
+      "is_me": false
     }
     """
 }

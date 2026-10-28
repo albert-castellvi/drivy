@@ -127,15 +127,16 @@ struct PublicLeagueCurrent: Decodable, Equatable {
 }
 
 /// One row of `public_league_ranking()` (S5): a member of the caller's group.
+///
+/// The RPC marks the caller's own row with `is_me` and no longer returns anybody's
+/// uuid, so a stranger in a public group cannot learn who is in it (S2).
 struct PublicLeagueRankingRow: Decodable, Equatable, Identifiable {
 
     /// 1-based position inside the group.
     let place: Int
 
-    let userID: String
-
     /// Only the visible name is shown: the group never exposes more of the
-    /// profile (S5, privacy of the MVP).
+    /// profile (S5, S2).
     let displayName: String
 
     /// XP earned inside the group's week (S4).
@@ -144,31 +145,36 @@ struct PublicLeagueRankingRow: Decodable, Equatable, Identifiable {
     /// `nil` when the row is outside both bands.
     let zone: PublicLeagueZone?
 
-    var id: String { userID }
+    /// True only on the caller's row (S2), which is what the view highlights.
+    let isMe: Bool
+
+    /// Stable identity of the row for `ForEach`: the place plus the visible name,
+    /// the only two values the payload still carries (S2).
+    var id: String { "\(place)-\(displayName)" }
 
     /// What the row shows on its trailing side.
     var xpText: String { LeagueXPText.format(weekXP) }
 
     enum CodingKeys: String, CodingKey {
         case place
-        case userID = "user_id"
         case displayName = "display_name"
         case weekXP = "week_xp"
         case zone
+        case isMe = "is_me"
     }
 
     init(
         place: Int,
-        userID: String,
         displayName: String,
         weekXP: Int,
-        zone: PublicLeagueZone?
+        zone: PublicLeagueZone?,
+        isMe: Bool
     ) {
         self.place = place
-        self.userID = userID
         self.displayName = displayName
         self.weekXP = weekXP
         self.zone = zone
+        self.isMe = isMe
     }
 
     init(from decoder: Decoder) throws {
@@ -176,9 +182,9 @@ struct PublicLeagueRankingRow: Decodable, Equatable, Identifiable {
 
         // `place` and `week_xp` are bigints, so both shapes are accepted.
         place = try container.decodeInteger(forKey: .place)
-        userID = try container.decode(String.self, forKey: .userID)
         displayName = try container.decode(String.self, forKey: .displayName)
         weekXP = try container.decodeInteger(forKey: .weekXP)
+        isMe = try container.decode(Bool.self, forKey: .isMe)
         // An unknown zone is read as "no zone" instead of failing the whole
         // standings: a future value must not blank the screen on an old build.
         zone = try container

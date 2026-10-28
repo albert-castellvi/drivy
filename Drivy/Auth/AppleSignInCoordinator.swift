@@ -78,7 +78,11 @@ extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
             return
         }
 
-        finish(with: .failure(AppleSignInError.failed(error.localizedDescription)))
+        // The upstream description is dropped (S5): an `ASAuthorizationError`
+        // description can name the account or the failure context, and it used
+        // to reach Sentry through this payload. Nothing reads it any more; the
+        // view model reports `CrashReport.appleSignInFailed`.
+        finish(with: .failure(AppleSignInError.failed(CrashReport.appleSignInFailed.code)))
     }
 }
 
