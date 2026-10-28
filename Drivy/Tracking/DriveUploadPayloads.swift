@@ -8,6 +8,9 @@ import Foundation
 /// device (S10).
 struct DriveRowPayload: Encodable, Equatable {
 
+    /// Client-generated primary key (D4): a retried upload reuses it, so the
+    /// insert can ignore the duplicate instead of creating a second row.
+    let id: UUID
     let userID: String
     let startedAt: String
     let endedAt: String
@@ -38,6 +41,7 @@ struct DriveRowPayload: Encodable, Equatable {
     }
 
     init(record: DriveRecord, userID: String) {
+        self.id = record.id
         self.userID = userID
         self.startedAt = DriveISO8601.string(from: record.startedAt)
         self.endedAt = DriveISO8601.string(from: record.endedAt)
