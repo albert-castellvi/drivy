@@ -197,3 +197,13 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
   todo el banco, en especial `alcohol_rate_*`, por la reforma en trámite de
   las tasas de alcohol. Entrega: un único PR con un commit por unidad (el
   usuario pidió merge al terminar, L7).
+- **L12** (2026-10-28) Usuario: «si» (aplicar `0002`). Aplicada en
+  thsqgdaadhnnwsadjhrj como migración `20261028084225 0002_duolingo_loop`
+  (`{"success":true}`), sha256 del fichero igual al del commit. Verificación de
+  solo lectura: 12 tablas, políticas nuevas presentes, lectura como
+  `authenticated` de `league_members`/`leagues`/`profiles` y `my_xp` sin error
+  (la recursión ha desaparecido). Avisos del linter esperados (RPC security
+  definer por diseño; grupos públicos sin políticas a propósito). Desfase
+  detectado: en remoto existe `20261027125628 drivy_function_hardening`, que
+  no está en `supabase/migrations/`. Primer CI del PR: la app compiló; un
+  único error en un test (orden de argumentos), corregido.

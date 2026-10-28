@@ -78,11 +78,15 @@ enum DailyQuestBoard {
     /// Display order of the chosen quests, also hashed so it is stable but not
     /// alphabetical (which would always put the lesson first or last).
     private static func ordered(_ quests: [DailyQuest], seed: UInt64) -> [DailyQuest] {
-        quests
-            .map { (quest: $0, order: stableHash("\(seed)|\($0.id)")) }
-            .sorted { left, right in
-                left.order == right.order ? left.quest.id < right.quest.id : left.order < right.order
+        let keyed: [(quest: DailyQuest, order: UInt64)] = quests.map { quest in
+            (quest: quest, order: stableHash("\(seed)|\(quest.id)"))
+        }
+        let sorted = keyed.sorted { (left: (quest: DailyQuest, order: UInt64), right: (quest: DailyQuest, order: UInt64)) -> Bool in
+            if left.order != right.order {
+                return left.order < right.order
             }
-            .map { $0.quest }
+            return left.quest.id < right.quest.id
+        }
+        return sorted.map { $0.quest }
     }
 }
