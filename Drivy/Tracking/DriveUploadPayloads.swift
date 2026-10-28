@@ -1,7 +1,7 @@
 import Foundation
 
 /// Row written to `public.drives`. Keys mirror the migration
-/// (`supabase/migrations/0001_drivy_init.sql`) verbatim, because PostgREST
+/// (`supabase/migrations/20261027125528_drivy_schema_v1.sql`) verbatim, because PostgREST
 /// matches column names exactly.
 ///
 /// There is no field here for a GPS fix or a motion sample: raw data stays on the

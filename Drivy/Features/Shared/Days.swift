@@ -8,7 +8,7 @@ extension Calendar {
     /// The server pins the zone: `madrid_today()`, `madrid_week_start()`, the
     /// `xp_ledger` day `(started_at at time zone 'Europe/Madrid')::date` and the
     /// `check (day between madrid_today() - 1 and madrid_today())` of
-    /// `supabase/migrations/0002_duolingo_loop.sql` all use Europe/Madrid. With
+    /// `supabase/migrations/20261028084225_0002_duolingo_loop.sql` all use Europe/Madrid. With
     /// the device zone instead, a Canarias phone (one hour behind) writes the
     /// next day's key between 23:00 and 00:00: the CHECK rejects the lesson and
     /// the quest silently loses its XP (B1 of the QA report).

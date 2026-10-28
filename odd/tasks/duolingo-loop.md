@@ -229,3 +229,11 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
   preguntas (sobre todo `alcohol_rate_*`) y probar la build 31 en el dispositivo.
   Avisos asumidos: A5 (tope de 30 sin probar con concurrencia real), A7 (ledger
   sin materializar) y el desfase de la migración remota `drivy_function_hardening`.
+- **L15** (2026-10-28) Usuario: «arregla el desfase de la migración remota».
+  `drivy_function_hardening` (remota, 20261027125628) eran 2 sentencias ya
+  copiadas a mano dentro de `0001_drivy_init.sql`: el esquema coincidía y solo
+  divergía el historial. Las migraciones se renombran a las versiones remotas
+  (`20261027125528_drivy_schema_v1`, `20261027125628_drivy_function_hardening`,
+  `20261028084225_0002_duolingo_loop`), con el hardening en su propio fichero;
+  ambos son idénticos al SQL remoto (diff sin líneas en blanco). Un test exige
+  el prefijo de versión de 14 dígitos. 23/23 en verde.

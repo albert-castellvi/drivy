@@ -3,7 +3,7 @@ import Foundation
 /// Divisions and movement bands of the public leagues (S5).
 ///
 /// Pure rules only: no network, no clock, so the screens and the tests read the
-/// same numbers. The SQL side (`0002_duolingo_loop.sql`) stores the division as
+/// same numbers. The SQL side (`20261028084225_0002_duolingo_loop.sql`) stores the division as
 /// a `smallint` between 1 and 5 and writes the band into `zone`; this is the
 /// client's reading of both.
 enum PublicLeagueDivision {

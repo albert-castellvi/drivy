@@ -7,7 +7,7 @@ import Foundation
 /// user to drive more, because a unit only counts drives that already happened.
 ///
 /// `rawValue` is the stable snake_case key shared with `public.habit_levels.unit`
-/// (`0002_duolingo_loop.sql` accepts exactly these five), so renaming a case would
+/// (`20261028084225_0002_duolingo_loop.sql` accepts exactly these five), so renaming a case would
 /// orphan every level already recorded for it.
 enum HabitUnit: String, CaseIterable, Identifiable {
 

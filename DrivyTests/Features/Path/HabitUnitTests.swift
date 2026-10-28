@@ -79,7 +79,7 @@ final class HabitUnitTests: XCTestCase {
     // MARK: - Keys of the database
 
     /// `public.habit_levels.unit` accepts exactly these five values, so the raw
-    /// values and their order are the contract with `0002_duolingo_loop.sql`.
+    /// values and their order are the contract with `20261028084225_0002_duolingo_loop.sql`.
     func testKeysMatchTheDatabaseAndThePathOrder() {
         XCTAssertEqual(
             HabitUnit.allCases.map(\.rawValue),
