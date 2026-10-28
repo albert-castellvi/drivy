@@ -125,6 +125,21 @@ struct StoreKitPremiumEntitlementProvider: PremiumEntitlementProviding {
         }
     }
 
+    // MARK: - Verified current JWS
+
+    /// JWS of the verified current entitlement that grants premium (S5.3).
+    ///
+    /// `currentEntitlements` already filters expired and revoked transactions,
+    /// and the selection re-checks the premium product and validity, so an
+    /// expired, revoked or foreign-product transaction is never posted to
+    /// `verify-premium`.
+    func verifiedPremiumJWS() async -> String? {
+        await PremiumEntitlement.verifiedCurrentJWS(
+            in: activeEntitlements(),
+            at: Date()
+        )
+    }
+
     // MARK: - Internals
 
     private func premiumProduct() async -> Product? {
@@ -146,7 +161,8 @@ extension PremiumEntitlement {
         self.init(
             productID: transaction.productID,
             expirationDate: transaction.expirationDate,
-            revocationDate: transaction.revocationDate
+            revocationDate: transaction.revocationDate,
+            jws: transaction.jwsRepresentation
         )
     }
 }

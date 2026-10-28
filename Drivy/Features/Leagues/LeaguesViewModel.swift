@@ -59,6 +59,9 @@ final class LeaguesViewModel: ObservableObject {
     /// `access` is the S9 snapshot of the plan in force: a free account belongs to at
     /// most one league, so the call is refused before touching the backend. `nil`
     /// (plan still unknown) never blocks.
+    ///
+    /// The server enforces the same cap (S5.1): when `create_league` raises
+    /// `league_limit`, the copy is exactly the one the client gate shows (S5.3).
     @discardableResult
     func createLeague(
         name: String,
@@ -86,6 +89,9 @@ final class LeaguesViewModel: ObservableObject {
             )
             leagues.insert(league, at: 0)
             return true
+        } catch LeagueJoinFailure.leagueLimit {
+            createErrorMessage = LeagueLimitGate.limitMessage
+            return false
         } catch {
             createErrorMessage = Self.createFailureMessage
             return false
@@ -104,6 +110,9 @@ final class LeaguesViewModel: ObservableObject {
     ///
     /// `access` is the S9 snapshot: the free plan's one-league cap is enforced here
     /// so the RPC is not even called. `nil` (plan still unknown) never blocks.
+    /// The server enforces the same cap (S5.1): a raised `league_limit` reaches the
+    /// join path through `LeagueJoinFailure.leagueLimit`, whose message is the
+    /// client-gate copy (S5.3).
     @discardableResult
     func joinLeague(code: String, userID: String, access: FreemiumAccess? = nil) async -> Bool {
         joinErrorMessage = nil

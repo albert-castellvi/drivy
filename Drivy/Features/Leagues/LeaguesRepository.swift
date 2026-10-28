@@ -57,6 +57,11 @@ enum LeagueJoinFailure: Error, Equatable {
     /// Ten failed attempts in an hour: the RPC raises `too_many_attempts` (S3).
     case tooManyAttempts
 
+    /// The caller is in one league already and has no active premium: the RPCs
+    /// raise `league_limit` (S5.1). The copy is the same the client gate shows,
+    /// so the paywall sentence is defined in exactly one place (S5.3).
+    case leagueLimit
+
     case unknown
 
     var message: String {
@@ -65,18 +70,23 @@ enum LeagueJoinFailure: Error, Equatable {
             return "Ese código no sirve: no existe o la liga ya está completa."
         case .tooManyAttempts:
             return "Demasiados intentos. Prueba de nuevo dentro de una hora."
+        case .leagueLimit:
+            return LeagueLimitGate.limitMessage
         case .unknown:
             return "No hemos podido unirte a la liga. Inténtalo de nuevo."
         }
     }
 
-    /// The RPC raises bare exception strings, so they reach the client inside the
+    /// The RPCs raise bare exception strings, so they reach the client inside the
     /// PostgREST error message (with the SQLSTATE prefix in front).
     static func from(serverMessage message: String) -> LeagueJoinFailure? {
         let normalized = message.lowercased()
 
         if normalized.contains("too_many_attempts") {
             return .tooManyAttempts
+        }
+        if normalized.contains("league_limit") {
+            return .leagueLimit
         }
         return nil
     }
@@ -143,10 +153,24 @@ struct SupabaseLeaguesRepository: LeaguesDataLoading {
         // One RPC instead of two inserts: the function draws the invite code and
         // adds the caller as a member, which is what keeps both out of reach of a
         // modified client (S3).
-        let rows: [LeagueRecord] = try await client
-            .rpc("create_league", params: ["p_name": name])
-            .execute()
-            .value
+        let rows: [LeagueRecord]
+
+        do {
+            rows = try await client
+                .rpc("create_league", params: ["p_name": name])
+                .execute()
+                .value
+        } catch {
+            // The free one-league cap is enforced by the RPC (S5.1); the raised
+            // `league_limit` maps to the same failure the join path uses, so the
+            // screen shows the paywall copy the client gate runs (S5.3).
+            // Everything else keeps its original error.
+            if let failure = LeagueJoinFailure.from(serverMessage: String(describing: error)),
+               failure == .leagueLimit {
+                throw failure
+            }
+            throw error
+        }
 
         guard let league = rows.first else {
             throw LeagueRepositoryError.emptyResult
@@ -167,7 +191,8 @@ struct SupabaseLeaguesRepository: LeaguesDataLoading {
         } catch {
             // The RPC raises bare exception strings, and PostgREST forwards them in
             // the error description: that is enough to map them without depending
-            // on the concrete error type of the client library.
+            // on the concrete error type of the client library. `league_limit`
+            // (S5.1) maps like the rest, to the client-gate copy (S5.3).
             if let failure = LeagueJoinFailure.from(serverMessage: String(describing: error)) {
                 throw failure
             }

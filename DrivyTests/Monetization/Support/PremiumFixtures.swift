@@ -28,11 +28,13 @@ enum PremiumFixtures {
     static func entitlement(
         productID: String = PremiumProduct.monthlyIdentifier,
         expiringIn days: Int = 30,
-        from now: Date = PremiumFixtures.date(anchorOffsetDays: 0)
+        from now: Date = PremiumFixtures.date(anchorOffsetDays: 0),
+        jws: String? = nil
     ) -> PremiumEntitlement {
         PremiumEntitlement(
             productID: productID,
-            expirationDate: now.addingTimeInterval(TimeInterval(days) * 86_400)
+            expirationDate: now.addingTimeInterval(TimeInterval(days) * 86_400),
+            jws: jws
         )
     }
 }
