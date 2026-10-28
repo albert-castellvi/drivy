@@ -47,6 +47,8 @@ async function createUser(db, name) {
     id,
     { full_name: name },
   ]);
+  // Sign-up seeds a pseudonym (S2 of security-hardening); tests name people.
+  await db.query(`update public.profiles set display_name = $2 where id = $1`, [id, name]);
   return id;
 }
 
@@ -211,8 +213,9 @@ test('probe: anon cannot read ledgers nor call any RPC', async () => {
   const user = await createUser(db, 'Ana');
   await addDrive(db, user, { km: 5, score: 95 });
 
-  assert.equal((await asAnon(db, `select * from public.xp_ledger`)).length, 0);
-  assert.equal((await asAnon(db, `select * from public.drives`)).length, 0);
+  // S7 of security-hardening: anon holds no grant at all, not just no rows.
+  await assert.rejects(asAnon(db, `select * from public.xp_ledger`), /permission denied/);
+  await assert.rejects(asAnon(db, `select * from public.drives`), /permission denied/);
 
   await assert.rejects(
     asAnon(db, `select * from public.my_xp(current_date)`),
@@ -772,20 +775,10 @@ test('probe: the weekly window is the ISO week of p_week_start', async () => {
 test('probe: a stranger cannot self-insert into a private league; join goes through the code', async () => {
   const db = await freshDatabase();
   const owner = await createUser(db, 'Owner');
-  const [league] = (
-    await db.query(
-      `insert into public.leagues (name, owner_id, invite_code) values ('L', $1, 'SECRET') returning id`,
-      [owner],
-    )
-  ).rows;
-  // The owner adds themself right after creating the league (the app's flow).
-  await asUser(db, owner, `insert into public.league_members (league_id, user_id) values ($1, $2)`, [
-    league.id,
-    owner,
-  ]);
+  const [league] = await asUser(db, owner, `select * from public.create_league('L')`);
   for (let i = 0; i < 24; i += 1) {
     const member = await createUser(db, `M${i}`);
-    await asUser(db, member, `select public.join_league_by_code('SECRET')`);
+    await asUser(db, member, `select public.join_league_by_code($1)`, [league.invite_code]);
   }
 
   const intruder = await createUser(db, 'Intruder');
@@ -796,7 +789,9 @@ test('probe: a stranger cannot self-insert into a private league; join goes thro
     ]),
     /row-level security/,
   );
-  await assert.rejects(asUser(db, intruder, `select public.join_league_by_code('SECRET')`), /league_full/);
+  // Full league: the same null answer as an unknown code.
+  const [full] = await asUser(db, intruder, `select public.join_league_by_code($1) as id`, [league.invite_code]);
+  assert.equal(full.id, null);
   assert.equal(
     (await db.query(`select count(*)::int as c from public.league_members where league_id = $1`, [league.id]))
       .rows[0].c,

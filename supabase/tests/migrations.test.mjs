@@ -48,6 +48,8 @@ async function createUser(db, name) {
     id,
     { full_name: name },
   ]);
+  // Sign-up seeds a pseudonym (S2 of security-hardening); tests name people.
+  await db.query(`update public.profiles set display_name = $2 where id = $1`, [id, name]);
   return id;
 }
 
@@ -59,6 +61,15 @@ async function asUser(db, userID, sql, params = []) {
     await tx.query(`select set_config('request.jwt.claims', $1, true)`, [
       JSON.stringify({ sub: userID, role: 'authenticated' }),
     ]);
+    return (await tx.query(sql, params)).rows;
+  });
+}
+
+// Runs `sql` with the publishable key and no session, the way PostgREST does.
+async function asAnon(db, sql, params = []) {
+  return db.transaction(async (tx) => {
+    await tx.exec('set local role anon');
+    await tx.query(`select set_config('request.jwt.claims', '', true)`);
     return (await tx.query(sql, params)).rows;
   });
 }
@@ -94,16 +105,7 @@ test('S10: league tables are readable without RLS recursion, and only by members
   const owner = await createUser(db, 'Owner');
   const outsider = await createUser(db, 'Outsider');
 
-  const [league] = await asUser(
-    db,
-    owner,
-    `insert into public.leagues (name, owner_id, invite_code) values ('Amigos', $1, 'ABC123') returning id`,
-    [owner],
-  );
-  await asUser(db, owner, `insert into public.league_members (league_id, user_id) values ($1, $2)`, [
-    league.id,
-    owner,
-  ]);
+  const [league] = await asUser(db, owner, `select * from public.create_league('Amigos')`);
 
   assert.equal((await asUser(db, owner, `select id from public.leagues`)).length, 1);
   assert.equal((await asUser(db, owner, `select user_id from public.league_members`)).length, 1);
@@ -117,7 +119,7 @@ test('S10: league tables are readable without RLS recursion, and only by members
   );
 
   // Joining by code still works, and makes the owner's profile visible.
-  const [joined] = await asUser(db, outsider, `select public.join_league_by_code('ABC123') as id`);
+  const [joined] = await asUser(db, outsider, `select public.join_league_by_code($1) as id`, [league.invite_code]);
   assert.equal(joined.id, league.id);
   assert.equal((await asUser(db, outsider, `select id from public.profiles`)).length, 2);
 });
@@ -320,4 +322,115 @@ test('S5: the first call of a new week settles last week once: top 7 up, bottom 
   const twice = await result(players[11]);
   assert.equal(twice.division, 3);
   assert.equal(twice.group_id, top.group_id);
+});
+
+// ---------------------------------------------------------------------------
+// odd/tasks/security-hardening.md
+// ---------------------------------------------------------------------------
+
+test('security S2: sign-up seeds a pseudonym, never the Apple name, and only the name is editable', async () => {
+  const db = await freshDatabase();
+  const id = uuid();
+  await db.query(`insert into auth.users (id, raw_user_meta_data) values ($1, $2)`, [
+    id,
+    { full_name: 'Ana García López' },
+  ]);
+  const [profile] = await asUser(db, id, `select display_name from public.profiles where id = $1`, [id]);
+  assert.match(profile.display_name, /^Conductor \d{4}$/);
+
+  await asUser(db, id, `update public.profiles set display_name = 'Ana' where id = $1`, [id]);
+  const [renamed] = await asUser(db, id, `select display_name from public.profiles where id = $1`, [id]);
+  assert.equal(renamed.display_name, 'Ana');
+
+  await assert.rejects(
+    asUser(db, id, `update public.profiles set avatar_url = 'x' where id = $1`, [id]),
+    /permission denied/,
+  );
+  for (const bad of ['   ', 'x'.repeat(31)]) {
+    await assert.rejects(
+      asUser(db, id, `update public.profiles set display_name = $2 where id = $1`, [id, bad]),
+      /check constraint/,
+    );
+  }
+});
+
+test('security S2: rankings mark the caller with is_me and never return uuids', async () => {
+  const db = await freshDatabase();
+  const ana = await createUser(db, 'Ana');
+  const bea = await createUser(db, 'Bea');
+  const [league] = await asUser(db, ana, `select * from public.create_league('L')`);
+  await asUser(db, bea, `select public.join_league_by_code($1)`, [league.invite_code]);
+
+  const privateRows = await asUser(db, bea, `select * from public.league_weekly_ranking($1, $2)`, [
+    league.id,
+    await weekStart(db),
+  ]);
+  assert.deepEqual(Object.keys(privateRows[0]).sort(), ['display_name', 'is_me', 'rank', 'week_xp']);
+  assert.deepEqual(
+    privateRows.map((r) => [r.display_name, r.is_me]).sort(),
+    [
+      ['Ana', false],
+      ['Bea', true],
+    ],
+  );
+
+  for (const user of [ana, bea]) await asUser(db, user, `select public.set_public_league_opt_in(true)`);
+  for (const user of [ana, bea]) await asUser(db, user, `select * from public.public_league_current()`);
+  const publicRows = await asUser(db, ana, `select * from public.public_league_ranking()`);
+  assert.deepEqual(Object.keys(publicRows[0]).sort(), ['display_name', 'is_me', 'place', 'week_xp', 'zone']);
+  assert.deepEqual(publicRows.filter((r) => r.is_me).map((r) => r.display_name), ['Ana']);
+});
+
+test('security S3: leagues are created on the server with 8-symbol codes, never by direct insert', async () => {
+  const db = await freshDatabase();
+  const owner = await createUser(db, 'Owner');
+  const [league] = await asUser(db, owner, `select * from public.create_league('  Amigos  ')`);
+  assert.match(league.invite_code, /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+  assert.equal(league.name, 'Amigos');
+  assert.equal(league.owner_id, owner);
+  assert.equal((await asUser(db, owner, `select user_id from public.league_members`)).length, 1);
+
+  await assert.rejects(
+    asUser(db, owner, `insert into public.leagues (name, owner_id, invite_code) values ('X', $1, 'ZZZZZZZZ')`, [owner]),
+    /row-level security/,
+  );
+});
+
+test('security S3: bad codes fail alike and ten failures in an hour lock joining', async () => {
+  const db = await freshDatabase();
+  const owner = await createUser(db, 'Owner');
+  const prober = await createUser(db, 'Prober');
+  const [league] = await asUser(db, owner, `select * from public.create_league('L')`);
+
+  for (let i = 0; i < 10; i += 1) {
+    const [row] = await asUser(db, prober, `select public.join_league_by_code($1) as id`, [`NOPE${i}AAA`]);
+    assert.equal(row.id, null);
+  }
+  assert.equal(
+    (await db.query(`select count(*)::int as c from public.league_join_failures where user_id = $1`, [prober])).rows[0].c,
+    10,
+  );
+  // Even the right code is refused once the budget is spent.
+  await assert.rejects(
+    asUser(db, prober, `select public.join_league_by_code($1)`, [league.invite_code]),
+    /too_many_attempts/,
+  );
+  // Codes are case- and space-insensitive for a legitimate user.
+  const friend = await createUser(db, 'Friend');
+  const [joined] = await asUser(db, friend, `select public.join_league_by_code($1) as id`, [
+    ` ${league.invite_code.toLowerCase()} `,
+  ]);
+  assert.equal(joined.id, league.id);
+});
+
+test('security S7: anon has no table or RPC access; authenticated cannot truncate', async () => {
+  const db = await freshDatabase();
+  const user = await createUser(db, 'Ana');
+  for (const table of ['profiles', 'drives', 'daily_scores', 'leagues', 'lesson_completions', 'public_league_entries']) {
+    await assert.rejects(asAnon(db, `select * from public.${table}`), /permission denied/, table);
+  }
+  for (const rpc of ["create_league('x')", "join_league_by_code('x')", 'madrid_today()']) {
+    await assert.rejects(asAnon(db, `select public.${rpc}`), /permission denied/, rpc);
+  }
+  await assert.rejects(asUser(db, user, `truncate public.drives`), /permission denied/);
 });
