@@ -209,7 +209,7 @@ private struct RoadTimelinePreview: View {
                 }
             }
 
-            RoadStop(pin: { KmPost(value: "87", size: KmPost.Size.marker) }) {
+            RoadStop(pin: { KmPost(value: "87", size: KmPostSize.marker) }) {
                 Text("13:40 · trayecto")
                     .font(.drivyFootnote)
                     .foregroundStyle(Color.drivyInkMuted)

@@ -10,16 +10,18 @@ import SwiftUI
 /// `drivyIce` for a streak freeze — S4 forbids an icy glyph, the colour is the
 /// message. A day with no drive and no freeze is drawn pending: a dashed rule and
 /// an empty cap, so the row never claims a day it did not earn.
+/// The two sizes of the system: the marker of a streak row, and the score
+/// post of a screen header (both from the approved mockup).
+enum KmPostSize {
+    static let marker = CGSize(width: 38, height: 52)
+    static let score = CGSize(width: 74, height: 92)
+}
+
 struct KmPost<Content: View>: View {
 
-    /// The two sizes of the system: the marker of a streak row, and the score
-    /// post of a screen header (both from the approved mockup).
-    enum Size {
-
-        static var marker: CGSize { CGSize(width: 38, height: 52) }
-
-        static var score: CGSize { CGSize(width: 74, height: 92) }
-    }
+    /// Nested name kept for use inside the type; callers write `KmPostSize`,
+    /// because a type nested in a generic one needs `Content` spelled out.
+    typealias Size = KmPostSize
 
     /// Colour of the cap.
     let capColor: Color
