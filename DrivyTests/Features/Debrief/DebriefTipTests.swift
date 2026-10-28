@@ -52,7 +52,7 @@ final class DebriefTipTests: XCTestCase {
 
     func testSpeedingCostsMoreThanAcceleration() {
         // 10 against 8.
-        let record = makeRecord(speedingEvents: 1, harshAccelerations: 1)
+        let record = makeRecord(harshAccelerations: 1, speedingEvents: 1)
 
         XCTAssertEqual(DebriefTip.tip(for: record), .speeding)
     }
