@@ -6,8 +6,6 @@ struct LeagueDetailView: View {
 
     let league: LeagueRecord
 
-    @EnvironmentObject private var auth: AuthViewModel
-
     @StateObject private var model: LeagueRankingViewModel
 
     init(league: LeagueRecord) {
@@ -58,18 +56,14 @@ struct LeagueDetailView: View {
                 .frame(width: 28, alignment: .leading)
 
             Text(row.displayName)
-                .font(.subheadline.weight(isCurrentUser(row) ? .bold : .regular))
+                .font(.subheadline.weight(row.isMe ? .bold : .regular))
 
             Spacer(minLength: 0)
 
             Text(row.xpText)
                 .font(.headline.monospacedDigit())
         }
-        .foregroundStyle(isCurrentUser(row) ? Color.accentColor : Color.primary)
-    }
-
-    private func isCurrentUser(_ row: LeagueRankingRow) -> Bool {
-        auth.signedInUser?.id == row.userID
+        .foregroundStyle(row.isMe ? Color.accentColor : Color.primary)
     }
 
     // MARK: - Invite
@@ -90,7 +84,7 @@ struct LeagueDetailView: View {
         } header: {
             Text("Invitar")
         } footer: {
-            Text("Hasta 25 amigos por liga. El enlace abre la app y une a quien lo recibe.")
+            Text("Código de 8 caracteres, hasta 25 amigos por liga. El enlace abre la app y une a quien lo recibe.")
         }
     }
 }
@@ -102,9 +96,8 @@ struct LeagueDetailView: View {
                 id: "preview",
                 name: "Los del barrio",
                 ownerID: "preview",
-                inviteCode: "ABC234"
+                inviteCode: "ABC23456"
             )
         )
     }
-    .environmentObject(AuthViewModel())
 }

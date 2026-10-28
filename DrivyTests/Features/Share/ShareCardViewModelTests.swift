@@ -7,7 +7,6 @@ import XCTest
 final class ShareCardViewModelTests: XCTestCase {
 
     private static let userID = "11111111-2222-3333-4444-555555555555"
-    private static let rivalID = "22222222-3333-4444-5555-666666666666"
 
     /// 2026-03-10, a Tuesday, at 12:00 in Europe/Madrid.
     private var madrid: Calendar {
@@ -31,7 +30,7 @@ final class ShareCardViewModelTests: XCTestCase {
         id: "1c2d3e4f-1111-4222-8333-944455556666",
         name: "Los del barrio",
         ownerID: ShareCardViewModelTests.userID,
-        inviteCode: "ABC234"
+        inviteCode: "ABC23456"
     )
 
     private func makeSUT() -> (
@@ -78,9 +77,10 @@ final class ShareCardViewModelTests: XCTestCase {
         )
     }
 
-    private func ranking(ranks: [(rank: Int, userID: String, name: String)]) -> [LeagueRankingRow] {
+    /// S2: the own row is the one the server marked, not the one matching a uuid.
+    private func ranking(ranks: [(rank: Int, name: String, isMe: Bool)]) -> [LeagueRankingRow] {
         ranks.map {
-            LeagueRankingRow(rank: $0.rank, userID: $0.userID, displayName: $0.name, weekXP: 120)
+            LeagueRankingRow(rank: $0.rank, displayName: $0.name, weekXP: 120, isMe: $0.isMe)
         }
     }
 
@@ -92,7 +92,7 @@ final class ShareCardViewModelTests: XCTestCase {
         today.drivesResult = .success([drive(score: 87)])
         leagues.leaguesResult = .success([Self.league])
         leagues.rankingOutcome = .success(
-            ranking(ranks: [(1, Self.rivalID, "Bruno"), (2, Self.userID, "Ana")])
+            ranking(ranks: [(1, "Bruno", false), (2, "Ana", true)])
         )
 
         await sut.load(userID: Self.userID)
@@ -152,6 +152,24 @@ final class ShareCardViewModelTests: XCTestCase {
         today.drivesResult = .success([drive(score: 74)])
         leagues.leaguesResult = .success([Self.league])
         leagues.rankingOutcome = .failure(FakeLeaguesDataLoader.FakeError.network)
+
+        await sut.load(userID: Self.userID)
+
+        let card = try XCTUnwrap(sut.card)
+        XCTAssertNil(card.leaguePosition)
+        XCTAssertEqual(card.score, 74)
+    }
+
+    /// S2: the position comes from the row the server marked as the caller's. A
+    /// ranking where nobody is marked (or where the own row is missing) leaves the
+    /// card without a position instead of guessing one from a name.
+    func testACardWithoutTheOwnRowShowsNoPosition() async throws {
+        let (sut, today, _, leagues) = makeSUT()
+        today.drivesResult = .success([drive(score: 74)])
+        leagues.leaguesResult = .success([Self.league])
+        leagues.rankingOutcome = .success(
+            ranking(ranks: [(1, "Bruno", false), (2, "Ana", false)])
+        )
 
         await sut.load(userID: Self.userID)
 

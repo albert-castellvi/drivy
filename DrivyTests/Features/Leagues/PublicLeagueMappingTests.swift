@@ -63,12 +63,23 @@ final class PublicLeagueMappingTests: XCTestCase {
         )
 
         XCTAssertEqual(row.place, 3)
-        XCTAssertEqual(row.userID, "11111111-2222-3333-4444-555555555555")
         XCTAssertEqual(row.displayName, "Ana")
         XCTAssertEqual(row.weekXP, 120)
         XCTAssertEqual(row.xpText, "120 XP")
         XCTAssertEqual(row.zone, .promotion)
-        XCTAssertEqual(row.id, row.userID)
+        XCTAssertTrue(row.isMe)
+        XCTAssertEqual(row.id, "3-Ana")
+    }
+
+    /// S2: the payload carries no uuid at all, only the server's mark of the
+    /// caller's row, so another member's row decodes as `isMe == false`.
+    func testSomebodyElsesRowIsNotMarkedAsMine() throws {
+        let row = try PostgrestFixtures.decode(
+            PublicLeagueRankingRow.self,
+            from: PostgrestFixtures.publicLeagueRankingRowWithoutZoneJSON
+        )
+
+        XCTAssertFalse(row.isMe)
     }
 
     func testANullZoneMeansNoMovement() throws {
@@ -86,10 +97,10 @@ final class PublicLeagueMappingTests: XCTestCase {
         let json = """
         {
           "place": 28,
-          "user_id": "33333333-4444-5555-6666-777777777777",
           "display_name": "Carla",
           "week_xp": 0,
-          "zone": "demotion"
+          "zone": "demotion",
+          "is_me": false
         }
         """
 
@@ -104,10 +115,10 @@ final class PublicLeagueMappingTests: XCTestCase {
         let json = """
         {
           "place": 4,
-          "user_id": "44444444-5555-6666-7777-888888888888",
           "display_name": "Diego",
           "week_xp": 60,
-          "zone": "promotion_playoff"
+          "zone": "promotion_playoff",
+          "is_me": false
         }
         """
 

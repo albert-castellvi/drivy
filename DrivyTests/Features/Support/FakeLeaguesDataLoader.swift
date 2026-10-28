@@ -28,7 +28,7 @@ final class FakeLeaguesDataLoader: LeaguesDataLoading {
     var setOptInError: Error?
 
     private(set) var leaguesCallCount = 0
-    private(set) var createCalls: [(name: String, inviteCode: String, userID: String)] = []
+    private(set) var createCalls: [String] = []
     private(set) var joinCalls: [String] = []
     private(set) var rankingCalls: [(leagueID: String, weekStart: String)] = []
     private(set) var publicLeagueStatusCallCount = 0
@@ -41,8 +41,8 @@ final class FakeLeaguesDataLoader: LeaguesDataLoading {
         return try leaguesResult.get()
     }
 
-    func createLeague(name: String, inviteCode: String, userID: String) async throws -> LeagueRecord {
-        createCalls.append((name, inviteCode, userID))
+    func createLeague(name: String) async throws -> LeagueRecord {
+        createCalls.append(name)
         return try createOutcome.get()
     }
 

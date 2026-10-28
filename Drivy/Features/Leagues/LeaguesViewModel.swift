@@ -9,7 +9,7 @@ final class LeaguesViewModel: ObservableObject {
     static let loadFailureMessage = "No hemos podido cargar tus ligas. Desliza para reintentar."
     static let createFailureMessage = "No hemos podido crear la liga. Inténtalo de nuevo."
     static let emptyNameMessage = "Ponle un nombre a tu liga."
-    static let invalidCodeMessage = "El código de invitación tiene 6 caracteres."
+    static let invalidCodeMessage = "El código de invitación tiene 8 caracteres y no lleva ni O ni I."
 
     /// `leagues.name` accepts 1…60 characters (schema check of T1).
     static let maximumNameLength = 60
@@ -29,14 +29,9 @@ final class LeaguesViewModel: ObservableObject {
     @Published private(set) var joinErrorMessage: String?
 
     private let repository: LeaguesDataLoading
-    private let inviteCodeGenerator: () -> String
 
-    init(
-        repository: LeaguesDataLoading = SupabaseLeaguesRepository(),
-        inviteCodeGenerator: @escaping () -> String = { LeagueInviteCode.generate() }
-    ) {
+    init(repository: LeaguesDataLoading = SupabaseLeaguesRepository()) {
         self.repository = repository
-        self.inviteCodeGenerator = inviteCodeGenerator
     }
 
     // MARK: - Loading
@@ -56,8 +51,10 @@ final class LeaguesViewModel: ObservableObject {
 
     // MARK: - Creation
 
-    /// Creates the league and joins it as its first member. Returns true when the
-    /// league exists in the backend afterwards.
+    /// Creates the league and joins it as its first member; the server draws its
+    /// eight-symbol invite code in the same call (S3), so creation cannot pick a
+    /// code a client could guess. Returns true when the league exists in the
+    /// backend afterwards.
     ///
     /// `access` is the S9 snapshot of the plan in force: a free account belongs to at
     /// most one league, so the call is refused before touching the backend. `nil`
@@ -65,7 +62,6 @@ final class LeaguesViewModel: ObservableObject {
     @discardableResult
     func createLeague(
         name: String,
-        userID: String,
         access: FreemiumAccess? = nil
     ) async -> Bool {
         createErrorMessage = nil
@@ -86,9 +82,7 @@ final class LeaguesViewModel: ObservableObject {
 
         do {
             let league = try await repository.createLeague(
-                name: String(trimmed.prefix(Self.maximumNameLength)),
-                inviteCode: inviteCodeGenerator(),
-                userID: userID
+                name: String(trimmed.prefix(Self.maximumNameLength))
             )
             leagues.insert(league, at: 0)
             return true
@@ -100,9 +94,13 @@ final class LeaguesViewModel: ObservableObject {
 
     // MARK: - Join
 
-    /// Joins a league with the code (or the whole invite link). The member cap is
-    /// enforced by `public.join_league_by_code`, so its failures are what the UI
-    /// translates. Returns true when the user is a member afterwards.
+    /// Joins a league with the code (or the whole invite link). The member cap and
+    /// the hourly attempt limit are enforced by `public.join_league_by_code` (S3),
+    /// so its answers are what the UI translates. Returns true when the user is a
+    /// member afterwards.
+    ///
+    /// The input is checked locally first: a code that cannot exist would only
+    /// spend one of the ten attempts allowed per hour.
     ///
     /// `access` is the S9 snapshot: the free plan's one-league cap is enforced here
     /// so the RPC is not even called. `nil` (plan still unknown) never blocks.
@@ -111,7 +109,7 @@ final class LeaguesViewModel: ObservableObject {
         joinErrorMessage = nil
 
         let normalized = LeagueInviteLink.code(fromUserInput: code)
-        guard normalized.count == LeagueInviteCode.length else {
+        guard LeagueInviteCode.isValid(normalized) else {
             joinErrorMessage = Self.invalidCodeMessage
             return false
         }

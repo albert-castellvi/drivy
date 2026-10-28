@@ -63,9 +63,6 @@ struct PublicLeaguePanel: View {
 
     @ObservedObject var model: PublicLeagueViewModel
 
-    /// Signed-in user, highlighted inside the standings.
-    let currentUserID: String?
-
     var body: some View {
         if model.isChangeBannerVisible {
             changeSection
@@ -152,7 +149,7 @@ struct PublicLeaguePanel: View {
                 .frame(width: 28, alignment: .leading)
 
             Text(row.displayName)
-                .font(.subheadline.weight(isCurrentUser(row) ? .bold : .regular))
+                .font(.subheadline.weight(row.isMe ? .bold : .regular))
 
             Spacer(minLength: 0)
 
@@ -166,18 +163,14 @@ struct PublicLeaguePanel: View {
             Text(row.xpText)
                 .font(.headline.monospacedDigit())
         }
-        .foregroundStyle(isCurrentUser(row) ? Color.accentColor : Color.primary)
+        .foregroundStyle(row.isMe ? Color.accentColor : Color.primary)
     }
 
     /// Current user marked on the row itself, so the eye finds it without
-    /// scanning names.
+    /// scanning names. The server marks the row (S2): the client no longer knows
+    /// anybody's uuid, not even its own inside the standings.
     private func highlight(for row: PublicLeagueRankingRow) -> Color? {
-        isCurrentUser(row) ? Color.accentColor.opacity(0.12) : nil
-    }
-
-    private func isCurrentUser(_ row: PublicLeagueRankingRow) -> Bool {
-        guard let currentUserID else { return false }
-        return row.userID == currentUserID
+        row.isMe ? Color.accentColor.opacity(0.12) : nil
     }
 }
 
@@ -189,9 +182,6 @@ struct PublicLeaguePanel: View {
 
 #Preview("Liga pública") {
     List {
-        PublicLeaguePanel(
-            model: PublicLeagueViewModel(),
-            currentUserID: "preview"
-        )
+        PublicLeaguePanel(model: PublicLeagueViewModel())
     }
 }

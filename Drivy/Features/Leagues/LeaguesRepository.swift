@@ -7,10 +7,15 @@ protocol LeaguesDataLoading {
 
     func leagues(userID: String) async throws -> [LeagueRecord]
 
-    func createLeague(name: String, inviteCode: String, userID: String) async throws -> LeagueRecord
+    /// Calls `public.create_league(p_name)`, which creates the league, draws its
+    /// eight-symbol invite code and makes the caller its first member in one step
+    /// (S3). Direct inserts into `leagues`/`league_members` are rejected by RLS.
+    func createLeague(name: String) async throws -> LeagueRecord
 
     /// Calls `public.join_league_by_code`, which enforces the 25-member cap and
-    /// returns the league id. Failures are thrown as `LeagueJoinFailure`.
+    /// the hourly attempt limit, and returns the league id or `nil` for an unknown
+    /// code and for a full league alike (S3). Failures are thrown as
+    /// `LeagueJoinFailure`.
     func joinLeague(inviteCode: String) async throws -> String
 
     /// Calls `public.league_weekly_ranking(p_league_id, p_week_start)`, which
@@ -38,24 +43,28 @@ protocol LeaguesDataLoading {
     func publicLeagueRanking() async throws -> [PublicLeagueRankingRow]
 }
 
-/// Server-side exceptions of `public.join_league_by_code` (S7) plus the copy the
-/// UI shows for them.
+/// Server-side answers of `public.join_league_by_code` (S3) plus the copy the UI
+/// shows for them.
+///
+/// The RPC answers `null` for an unknown code and for a full league alike, so the
+/// client cannot tell the two apart and neither can the person probing codes.
 enum LeagueJoinFailure: Error, Equatable {
 
-    /// The code does not match any league (`raise exception 'league_not_found'`).
-    case notFound
+    /// The RPC returned no league id: the code does not exist, or the league is
+    /// already full (S3).
+    case unavailable
 
-    /// The league already has 25 members (`raise exception 'league_full'`).
-    case full
+    /// Ten failed attempts in an hour: the RPC raises `too_many_attempts` (S3).
+    case tooManyAttempts
 
     case unknown
 
     var message: String {
         switch self {
-        case .notFound:
-            return "No existe ninguna liga con ese código."
-        case .full:
-            return "Esa liga ya tiene 25 miembros."
+        case .unavailable:
+            return "Ese código no sirve: no existe o la liga ya está completa."
+        case .tooManyAttempts:
+            return "Demasiados intentos. Prueba de nuevo dentro de una hora."
         case .unknown:
             return "No hemos podido unirte a la liga. Inténtalo de nuevo."
         }
@@ -66,11 +75,8 @@ enum LeagueJoinFailure: Error, Equatable {
     static func from(serverMessage message: String) -> LeagueJoinFailure? {
         let normalized = message.lowercased()
 
-        if normalized.contains("league_not_found") {
-            return .notFound
-        }
-        if normalized.contains("league_full") {
-            return .full
+        if normalized.contains("too_many_attempts") {
+            return .tooManyAttempts
         }
         return nil
     }
@@ -103,8 +109,8 @@ enum PublicLeagueFailure: Error, Equatable {
 }
 
 enum LeagueRepositoryError: Error, Equatable {
-    /// The insert worked but PostgREST returned no row to read the code from.
-    case emptyInsert
+    /// The RPC worked but PostgREST returned no row to read the league from.
+    case emptyResult
 }
 
 /// Write/read path of the Ligas tab (S5, S10).
@@ -133,38 +139,31 @@ struct SupabaseLeaguesRepository: LeaguesDataLoading {
         return rows
     }
 
-    func createLeague(name: String, inviteCode: String, userID: String) async throws -> LeagueRecord {
+    func createLeague(name: String) async throws -> LeagueRecord {
+        // One RPC instead of two inserts: the function draws the invite code and
+        // adds the caller as a member, which is what keeps both out of reach of a
+        // modified client (S3).
         let rows: [LeagueRecord] = try await client
-            .from("leagues")
-            .insert(LeagueInsertPayload(name: name, ownerID: userID, inviteCode: inviteCode))
-            .select("id,name,owner_id,invite_code")
+            .rpc("create_league", params: ["p_name": name])
             .execute()
             .value
 
         guard let league = rows.first else {
-            throw LeagueRepositoryError.emptyInsert
+            throw LeagueRepositoryError.emptyResult
         }
-
-        // The creator is a member too: the weekly ranking is built on
-        // `league_members`, so leaving the owner out would hide their own score.
-        try await client
-            .from("league_members")
-            .insert(LeagueMemberInsertPayload(leagueID: league.id, userID: userID))
-            .execute()
 
         return league
     }
 
     func joinLeague(inviteCode: String) async throws -> String {
         let code = LeagueInviteCode.normalize(inviteCode)
+        let leagueID: String?
 
         do {
-            let leagueID: String = try await client
+            leagueID = try await client
                 .rpc("join_league_by_code", params: ["p_code": code])
                 .execute()
                 .value
-
-            return leagueID
         } catch {
             // The RPC raises bare exception strings, and PostgREST forwards them in
             // the error description: that is enough to map them without depending
@@ -174,6 +173,14 @@ struct SupabaseLeaguesRepository: LeaguesDataLoading {
             }
             throw LeagueJoinFailure.unknown
         }
+
+        // `null` is the RPC's single answer for an unknown code and for a league
+        // that is already full (S3): the client must not invent a distinction.
+        guard let leagueID else {
+            throw LeagueJoinFailure.unavailable
+        }
+
+        return leagueID
     }
 
     func weeklyRanking(leagueID: String, weekStart: String) async throws -> [LeagueRankingRow] {
@@ -238,31 +245,5 @@ struct SupabaseLeaguesRepository: LeaguesDataLoading {
             .value
 
         return rows
-    }
-}
-
-/// Insert shape of `public.leagues` (S7). Keys mirror the migration verbatim.
-private struct LeagueInsertPayload: Encodable {
-
-    let name: String
-    let ownerID: String
-    let inviteCode: String
-
-    enum CodingKeys: String, CodingKey {
-        case name
-        case ownerID = "owner_id"
-        case inviteCode = "invite_code"
-    }
-}
-
-/// Insert shape of `public.league_members`.
-private struct LeagueMemberInsertPayload: Encodable {
-
-    let leagueID: String
-    let userID: String
-
-    enum CodingKeys: String, CodingKey {
-        case leagueID = "league_id"
-        case userID = "user_id"
     }
 }

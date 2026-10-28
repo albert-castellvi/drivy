@@ -16,7 +16,7 @@ final class LeagueLimitGatingTests: XCTestCase {
         id: "1c2d3e4f-1111-4222-8333-944455556666",
         name: "Los del barrio",
         ownerID: LeagueLimitGatingTests.userID,
-        inviteCode: "ABC234"
+        inviteCode: "ABC23456"
     )
 
     private static let anchorDate = PremiumFixtures.anchorDate
@@ -38,7 +38,7 @@ final class LeagueLimitGatingTests: XCTestCase {
         fake.createOutcome = .success(Self.league)
         fake.joinOutcome = .success(Self.league.id)
 
-        let sut = LeaguesViewModel(repository: fake, inviteCodeGenerator: { "XYZ789" })
+        let sut = LeaguesViewModel(repository: fake)
         await sut.load(userID: Self.userID)
         return (sut, fake)
     }
@@ -79,7 +79,6 @@ final class LeagueLimitGatingTests: XCTestCase {
 
         let created = await sut.createLeague(
             name: "Otra liga",
-            userID: Self.userID,
             access: access(plan: .free)
         )
 
@@ -94,7 +93,6 @@ final class LeagueLimitGatingTests: XCTestCase {
 
         let created = await sut.createLeague(
             name: "Los del barrio",
-            userID: Self.userID,
             access: access(plan: .free)
         )
 
@@ -108,7 +106,6 @@ final class LeagueLimitGatingTests: XCTestCase {
 
         let created = await sut.createLeague(
             name: "Otra liga",
-            userID: Self.userID,
             access: access(plan: .premium)
         )
 
@@ -122,7 +119,7 @@ final class LeagueLimitGatingTests: XCTestCase {
         let (sut, fake) = await makeSUT(leagues: [Self.league])
 
         let joined = await sut.joinLeague(
-            code: "ABC234",
+            code: "ABC23456",
             userID: Self.userID,
             access: access(plan: .free)
         )
@@ -136,13 +133,13 @@ final class LeagueLimitGatingTests: XCTestCase {
         let (sut, fake) = await makeSUT()
 
         let joined = await sut.joinLeague(
-            code: "ABC234",
+            code: "ABC23456",
             userID: Self.userID,
             access: access(plan: .free)
         )
 
         XCTAssertTrue(joined)
-        XCTAssertEqual(fake.joinCalls, ["ABC234"])
+        XCTAssertEqual(fake.joinCalls, ["ABC23456"])
     }
 
     /// Preserved behaviour: without a plan snapshot the view model behaves exactly as
@@ -150,7 +147,7 @@ final class LeagueLimitGatingTests: XCTestCase {
     func testWithoutAPlanSnapshotTheViewModelDoesNotGate() async {
         let (sut, fake) = await makeSUT(leagues: [Self.league])
 
-        let created = await sut.createLeague(name: "Otra liga", userID: Self.userID)
+        let created = await sut.createLeague(name: "Otra liga")
 
         XCTAssertTrue(created)
         XCTAssertEqual(fake.createCalls.count, 1)

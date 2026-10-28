@@ -28,15 +28,15 @@ final class LeagueRankingViewModelTests: XCTestCase {
         return (sut, fake)
     }
 
-    private func row(_ rank: Int, _ userID: String, _ name: String, xp: Int = 150) -> LeagueRankingRow {
-        LeagueRankingRow(rank: rank, userID: userID, displayName: name, weekXP: xp)
+    private func row(_ rank: Int, _ name: String, xp: Int = 150, isMe: Bool = false) -> LeagueRankingRow {
+        LeagueRankingRow(rank: rank, displayName: name, weekXP: xp, isMe: isMe)
     }
 
     func testLoadPublishesTheWeeklyRows() async {
         let (sut, fake) = makeSUT()
         fake.rankingOutcome = .success([
-            row(1, "user-a", "Ana", xp: 210),
-            row(2, "user-b", "Bruno", xp: 90)
+            row(1, "Ana", xp: 210, isMe: true),
+            row(2, "Bruno", xp: 90)
         ])
 
         await sut.load()
@@ -47,6 +47,20 @@ final class LeagueRankingViewModelTests: XCTestCase {
         XCTAssertEqual(sut.rows.first?.xpText, "210 XP")
         XCTAssertNil(sut.errorMessage)
         XCTAssertFalse(sut.isLoading)
+    }
+
+    /// S2: the caller's row is identified by the server's `is_me` mark, which is the
+    /// only thing the view model can use now that the payload carries no uuids.
+    func testTheOwnRowIsTheOneTheServerMarked() async {
+        let (sut, fake) = makeSUT()
+        fake.rankingOutcome = .success([
+            row(1, "Bruno", xp: 210),
+            row(2, "Ana", xp: 90, isMe: true)
+        ])
+
+        await sut.load()
+
+        XCTAssertEqual(sut.rows.filter(\.isMe).map(\.displayName), ["Ana"])
     }
 
     func testRankingIsRequestedForTheCurrentMonday() async {
