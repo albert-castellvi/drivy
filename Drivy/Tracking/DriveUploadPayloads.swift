@@ -22,6 +22,7 @@ struct DriveRowPayload: Encodable, Equatable {
     let summary: DriveSummaryPayload
 
     enum CodingKeys: String, CodingKey {
+        case id
         case userID = "user_id"
         case startedAt = "started_at"
         case endedAt = "ended_at"

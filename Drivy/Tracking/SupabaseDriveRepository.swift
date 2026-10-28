@@ -14,18 +14,33 @@ struct SupabaseDriveRepository: DriveUploading {
         self.client = client
     }
 
-    func upload(_ record: DriveRecord) async throws {
-        let userID = try await client.auth.session.user.id.uuidString
+    func currentSessionUserID() async throws -> String {
+        try await client.auth.session.user.id.uuidString
+    }
 
+    func upload(_ record: DriveRecord) async throws {
+        let userID = try await currentSessionUserID()
+
+        // D4: idempotent insert. The client generated the `drives.id` primary
+        // key when the drive ended, so a retry after a network error either
+        // creates the row or finds it already stored: never a second row, and
+        // never a permanent `23505` duplicate-key failure. `ignoreDuplicates`
+        // turns the primary-key conflict into a success (PostgREST
+        // `Prefer: resolution=ignore-duplicates` on `on_conflict=id`).
         try await client
             .from("drives")
-            .insert(DriveRowPayload(record: record, userID: userID))
+            .upsert(
+                DriveRowPayload(record: record, userID: userID),
+                onConflict: "id",
+                ignoreDuplicates: true
+            )
             .execute()
 
         // S6: the daily score is the distance-weighted average of every drive of
         // the day, so it is recomputed from the rows the server now holds. That
         // keeps devices and reinstalls consistent instead of trusting a local
-        // counter.
+        // counter. It runs on every attempt, including a retried one: recomputing
+        // from the server rows is idempotent (D4).
         //
         // Madrid, not the device zone: `xp_ledger` files the same drive under
         // `(started_at at time zone 'Europe/Madrid')::date`, so a device an hour

@@ -10,6 +10,7 @@ final class DriveUploadPayloadTests: XCTestCase {
     private static let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
 
     private static let driveColumns: Set<String> = [
+        "id",
         "user_id",
         "started_at",
         "ended_at",
@@ -61,6 +62,17 @@ final class DriveUploadPayloadTests: XCTestCase {
         let payload = DriveRowPayload(record: makeRecord(makeScore()), userID: "user-1")
 
         XCTAssertEqual(Set(try encodedJSON(payload).keys), Self.driveColumns)
+    }
+
+    func testDriveRowPayloadCarriesTheClientGeneratedID() throws {
+        let record = makeRecord(makeScore())
+        let payload = DriveRowPayload(record: record, userID: "user-1")
+        let json = try encodedJSON(payload)
+
+        // D4: the id is the client-generated `drives.id` primary key, so a
+        // retried upload finds the row already stored instead of duplicating it.
+        XCTAssertEqual(try XCTUnwrap(UUID(uuidString: json["id"] as? String ?? "")), record.id)
+        XCTAssertEqual(payload.id, record.id)
     }
 
     func testDriveRowPayloadCarriesTheSummarizedCountersOnly() throws {
