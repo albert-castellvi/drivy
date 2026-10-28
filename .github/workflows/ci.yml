@@ -24,20 +24,24 @@
 #
 # SIGNED PIPELINE (implemented, S11 / T8):
 #   `DEVELOPMENT_TEAM` stays unset in `project.yml` on purpose (simulator builds
-#   need no team); the team is injected by the workflow instead. Repository
-#   secrets consumed here (Settings → Secrets and variables → Actions):
+#   need no team); the team is injected by the workflow instead. Secrets of the
+#   `release` environment (Settings → Environments → release; deployment rule:
+#   branch `main` only), consumed only by the signed job:
 #     APP_STORE_CONNECT_API_KEY_ID       key id of the ASC API key (10 chars)
 #     APP_STORE_CONNECT_API_ISSUER_ID    issuer id of that key (UUID)
 #     APP_STORE_CONNECT_API_KEY_BASE64   base64 of AuthKey_<KEYID>.p8
+#     DIST_CERTIFICATE_P12_BASE64        base64 of the team's Apple Distribution
+#                                        .p12 (shared with ProofMate: rotating
+#                                        it means updating both repositories)
+#     DIST_CERTIFICATE_PASSWORD          password of that .p12
 #     SENTRY_AUTH_TOKEN                  Sentry auth token for the dSYM upload
 #                                        (optional: without it step 6 warns and
 #                                        skips)
 #   The Apple Developer team id (QP5A6D4Y4P) is public and hardcoded in the job
-#   env. No .p12 or .mobileprovision secret is needed: the Apple Distribution
-#   certificate and the App Store provisioning profile are created on the fly
-#   through the App Store Connect REST API by
-#   `.github/scripts/provision-signing.sh`, and the archive signs manually with
-#   exactly that identity and profile.
+#   env. The App Store provisioning profile is created on the fly through the
+#   App Store Connect REST API by `.github/scripts/provision-signing.sh`, which
+#   reuses the distribution certificate whose private key the .p12 holds, and
+#   the archive signs manually with exactly that identity and profile.
 #
 #   Steps, in order:
 #     1. decode the .p8 to $HOME/private_keys/AuthKey_<KEYID>.p8 (chmod 600,
@@ -219,8 +223,13 @@ jobs:
 
   build-release:
     name: Signed TestFlight archive + upload (main only)
-    # S11: the release build belongs to `main` only, never to a PR.
-    if: github.event_name != 'pull_request'
+    # S11: the release build belongs to `main` only, never to a PR nor to a
+    # manual run on another branch.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # The signing and App Store Connect secrets live in the `release`
+    # environment, whose deployment rule only admits `main`: no other branch or
+    # workflow can read them, even if this `if` is ever loosened.
+    environment: release
     runs-on: macos-26
     # Archive + export + upload; App Store Connect processing itself is
     # asynchronous and is not waited for by this job.
@@ -240,7 +249,7 @@ jobs:
       # resolves it through PROVISIONING_PROFILE_SPECIFIER, so it must stay
       # exactly the name registered in the portal.
       PROFILE_NAME: Drivy App Store CI
-      # Repository secrets, surfaced as env vars only so the fallback guard can
+      # `release` environment secrets, surfaced as env vars only so the fallback guard can
       # test them with a shell `-n`: `secrets` is not available to `if:`.
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
