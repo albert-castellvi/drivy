@@ -1,6 +1,8 @@
+import Foundation
 import SwiftUI
 import UIKit
 import XCTest
+@testable import Drivy
 
 /// S8: the visual proof of the redesign. One test renders one gallery sheet twice —
 /// light and dark — through `ImageRenderer` and, when `GALLERY_DIR` is set (CI does
@@ -64,7 +66,7 @@ private func renderGallerySheet<V: View>(
 
     let url = directory.appendingPathComponent("\(name)-\(appearance).png")
     do {
-        try data.write(to: url, options: .atomic)
+        try data.write(to: url, options: Data.WritingOptions.atomic)
     } catch {
         XCTFail(
             "could not write \(url.path) for gallery \"\(name)\" in \(appearance) mode: \(error)"
