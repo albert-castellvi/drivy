@@ -22,6 +22,8 @@ struct ShareCardSheet: View {
                 content
             }
             .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.drivyPaper)
             .navigationTitle("Tu tarjeta")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -42,8 +44,13 @@ struct ShareCardSheet: View {
     @ViewBuilder
     private var content: some View {
         if let card = model.card {
+            // The card is a printed object, so it needs no elevation: a hairline
+            // rule is all the separation it wants (S3, S4: no shadows).
             ShareCardView(model: card)
-                .shadow(radius: 12, y: 6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .stroke(Color.drivyRule, lineWidth: 1)
+                )
                 .accessibilityLabel(card.accessibilitySummary)
 
             if let image {
@@ -57,26 +64,27 @@ struct ShareCardSheet: View {
                     Label("Compartir en stories", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
-                .glassProminentOrBorderedProminent()
+                .buttonStyle(.directionSign)
             } else {
                 ProgressView()
             }
 
             Text("Imagen cuadrada de 1080 × 1080, lista para Instagram o TikTok.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyInkMuted)
                 .multilineTextAlignment(.center)
         } else if model.isLoading {
             ProgressView("Preparando tu tarjeta…")
+                .font(.drivyBody)
         } else if let errorMessage = model.errorMessage {
             Text(errorMessage)
-                .font(.footnote)
-                .foregroundStyle(.red)
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyAlertText)
                 .multilineTextAlignment(.center)
         } else {
             Text("Registra un trayecto para tener algo que compartir.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.drivyBody)
+                .foregroundStyle(Color.drivyInkMuted)
                 .multilineTextAlignment(.center)
         }
     }

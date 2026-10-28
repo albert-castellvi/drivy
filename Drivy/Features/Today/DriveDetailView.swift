@@ -7,6 +7,10 @@ import SwiftUI
 /// figures here come from `public.drives` and the route can only come from an
 /// in-memory track this device still holds (`LocalRouteStore`). When there is no
 /// track, the screen says so instead of drawing an invented line.
+///
+/// The screen speaks the same road language as the post-drive summary (S5): the
+/// route as the hero, the score as a hitto, the event kinds as dashboard
+/// tell-tales, and the events as a rule-divided list of road signs — no cards.
 struct DriveDetailView: View {
 
     let drive: DriveHistoryRow
@@ -15,15 +19,25 @@ struct DriveDetailView: View {
         LocalRouteStore.shared.track(forStartedAt: drive.startedAt)
     }
 
+    /// The stored route only when it has enough points to be drawn as a line.
+    private var drawableTrack: DriveTrack? {
+        guard let track, track.coordinates.count > 1 else { return nil }
+        return track
+    }
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 24) {
                 mapSection
-                summarySection
+                headlineSection
+                DriveEventLampRow(rows: drive.eventRows)
                 eventsSection
             }
             .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollContentBackground(.hidden)
+        .background(Color.drivyPaper)
         .navigationTitle("Trayecto")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -32,13 +46,13 @@ struct DriveDetailView: View {
 
     @ViewBuilder
     private var mapSection: some View {
-        if let track, track.coordinates.count > 1 {
-            Map(initialPosition: .region(track.region)) {
-                MapPolyline(coordinates: track.coordinates)
-                    .stroke(Color.accentColor, lineWidth: 4)
+        if let drawableTrack {
+            Map(initialPosition: .region(drawableTrack.region)) {
+                MapPolyline(coordinates: drawableTrack.coordinates)
+                    .stroke(Color.drivyTint, lineWidth: 4)
             }
-            .frame(height: 220)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(height: 260)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         } else {
             PlaceholderCard(
                 systemImage: "map",
@@ -50,71 +64,103 @@ struct DriveDetailView: View {
         }
     }
 
-    // MARK: - Summary
+    // MARK: - Score and figures
 
-    private var summarySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(DriveFormat.shortDay(drive.startedAt))
-                    .font(.headline)
-                Text(
-                    "\(DriveFormat.time(drive.startedAt)) · "
-                        + DriveFormat.duration(TimeInterval(drive.durationSeconds))
+    private var headlineSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .bottom, spacing: 12) {
+                KmPost(
+                    value: DriveFormat.score(drive.score),
+                    capColor: Color.drivySignRed,
+                    size: KmPostSize.score
                 )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Nota")
+                        .font(.drivyTitle)
+                        .foregroundStyle(Color.drivyInk)
+
+                    Text(DriveFormat.shortDay(drive.startedAt))
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyInkMuted)
+
+                    Text(
+                        "\(DriveFormat.time(drive.startedAt)) · "
+                            + DriveFormat.duration(TimeInterval(drive.durationSeconds))
+                    )
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
+                }
+
+                Spacer(minLength: 0)
             }
+            .accessibilityElement(children: .combine)
 
             HStack(alignment: .top, spacing: 16) {
-                DriveMetric(title: "Nota", value: DriveFormat.score(drive.score))
-                DriveMetric(title: "Distancia", value: DriveFormat.distance(drive.distanceKm))
-            }
-
-            HStack(alignment: .top, spacing: 16) {
-                DriveMetric(
-                    title: "Media",
-                    value: DriveFormat.speed(drive.averageSpeedKmh)
-                )
-                DriveMetric(
-                    title: "Modo",
-                    value: drive.connectedMode ? "Conectado" : "Sin conexión"
-                )
+                DriveQuietFigure(title: "Distancia", value: DriveFormat.distance(drive.distanceKm))
+                DriveQuietFigure(title: "Media", value: DriveFormat.speed(drive.averageSpeedKmh))
+                DriveQuietFigure(title: "Modo", value: drive.connectedMode ? "Conectado" : "Sin conexión")
             }
         }
-        .drivyCard()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Events
 
     private var eventsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Cómo fue la conducción")
-                .font(.headline)
+                .font(.drivyHeadline)
+                .foregroundStyle(Color.drivyInk)
+                .padding(.bottom, 8)
 
-            eventRow("Frenadas bruscas", count: drive.harshBrakes, systemImage: "hand.raised.fill")
-            eventRow("Aceleraciones bruscas", count: drive.harshAccelerations, systemImage: "arrow.up.right")
-            eventRow("Excesos de velocidad", count: drive.speedingEvents, systemImage: "speedometer")
-            eventRow("Uso del móvil", count: drive.phoneUseEvents, systemImage: "iphone")
+            ForEach(Array(drive.eventRows.enumerated()), id: \.element.id) { index, row in
+                if index > 0 {
+                    DriveHairlineRule().padding(.vertical, 6)
+                }
+
+                DriveEventSignRow(row: row)
+            }
 
             if drive.connectedMode {
+                DriveHairlineRule().padding(.vertical, 6)
+
                 Text("Conducción conectada: el uso del móvil no penaliza (S13).")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
             }
         }
-        .drivyCard()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension DriveHistoryRow {
+
+    /// The four event kinds with the count stored for this drive, always in
+    /// `DriveEventKind.allCases` order and with zero counts included: the same
+    /// order and the same words the post-drive summary uses, so the two screens of
+    /// one drive can never disagree (S5).
+    var eventRows: [DebriefEventRow] {
+        DriveEventKind.allCases.map { kind in
+            DebriefEventRow(kind: kind, count: eventCount(of: kind))
+        }
     }
 
-    private func eventRow(_ title: String, count: Int, systemImage: String) -> some View {
-        HStack(spacing: 12) {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline)
-
-            Spacer(minLength: 0)
-
-            Text("\(count)")
-                .font(.subheadline.monospacedDigit().weight(.semibold))
+    /// The stored count of one kind. `DriveRecord` answers the same question for a
+    /// drive still on the phone; this is its twin for a row read back from the
+    /// server.
+    private func eventCount(of kind: DriveEventKind) -> Int {
+        switch kind {
+        case .harshBrake:
+            return harshBrakes
+        case .harshAcceleration:
+            return harshAccelerations
+        case .speeding:
+            return speedingEvents
+        case .phoneUse:
+            return phoneUseEvents
         }
     }
 }

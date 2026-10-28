@@ -3,11 +3,15 @@ import SwiftUI
 
 /// The ~30-second summary shown when a drive ends (S2).
 ///
-/// It answers one question — what cost me points — with the driver score, the count
-/// of every event kind, the route on a map with one marker per located event and a
-/// single piece of advice chosen from the component that cost the most. Nothing
-/// here invites the user to drive more, further or more often: the loop rewards
-/// driving better (S2, S4), so the only call to action of the sheet is closing it.
+/// It answers one question — what cost me points — with the route on a map as the
+/// hero, one small road sign per located event, the score as a hitto, the four
+/// event kinds as dashboard tell-tales and a single piece of advice chosen from
+/// the component that cost the most. Nothing here invites the user to drive more,
+/// further or more often: the loop rewards driving better (S2, S4), so the only
+/// call to action of the sheet is closing it.
+///
+/// The layout is the road language of S5: map first, signs instead of tinted dots,
+/// `WarningLamp`s instead of stat tiles, hairline rules instead of stacked cards.
 ///
 /// The route is the in-memory track `LocalRouteStore` kept for this drive (L11): as
 /// with the drive detail, a route this device does not remember cannot be invented.
@@ -34,6 +38,13 @@ struct DriveDebriefView: View {
         LocalRouteStore.shared.track(forStartedAt: record.startedAt)
     }
 
+    /// The stored route only when it has enough points to be drawn as a line; the
+    /// same rule the screen has always used.
+    private var drawableTrack: DriveTrack? {
+        guard let track, track.coordinates.count > 1 else { return nil }
+        return track
+    }
+
     private var markerCoordinates: [CLLocationCoordinate2D] {
         summary.markers.map { marker in
             CLLocationCoordinate2D(
@@ -43,17 +54,26 @@ struct DriveDebriefView: View {
         }
     }
 
+    /// Everything the camera has to contain: the line and the events, if any.
+    private var mapCoordinates: [CLLocationCoordinate2D] {
+        (drawableTrack?.coordinates ?? []) + markerCoordinates
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    scoreSection
+                VStack(alignment: .leading, spacing: 24) {
                     mapSection
+                    headlineSection
+                    DriveEventLampRow(rows: summary.eventRows)
                     eventsSection
                     adviceSection
                 }
                 .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.drivyPaper)
             .navigationTitle("Resumen del trayecto")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -67,65 +87,29 @@ struct DriveDebriefView: View {
         .onDisappear { close() }
     }
 
-    // MARK: - Score
-
-    private var scoreSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(DriveFormat.score(summary.score))
-                    .font(.system(size: 46, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-
-                Text("Driver Score")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(alignment: .top, spacing: 16) {
-                DriveMetric(title: "Distancia", value: DriveFormat.distance(summary.distanceKm))
-                DriveMetric(
-                    title: "Duración",
-                    value: DriveFormat.duration(TimeInterval(summary.durationSeconds))
-                )
-            }
-        }
-        .drivyCard()
-    }
-
-    // MARK: - Map
+    // MARK: - Map (the hero of the screen)
 
     @ViewBuilder
     private var mapSection: some View {
-        if let track, track.coordinates.count > 1 {
-            Map(initialPosition: .region(MapFit.region(for: track.coordinates + markerCoordinates))) {
-                MapPolyline(coordinates: track.coordinates)
-                    .stroke(Color.accentColor, lineWidth: 4)
+        if drawableTrack != nil || !markerCoordinates.isEmpty {
+            Map(initialPosition: .region(MapFit.region(for: mapCoordinates))) {
+                if let drawableTrack {
+                    MapPolyline(coordinates: drawableTrack.coordinates)
+                        .stroke(Color.drivyTint, lineWidth: 4)
+                }
+
                 ForEach(summary.markers) { marker in
-                    Marker(
-                        marker.kind.debriefTitle,
-                        systemImage: marker.kind.debriefSystemImage,
-                        coordinate: MapFit.coordinate(marker.coordinate)
-                    )
-                    .tint(marker.kind.debriefTint)
+                    // The title is the annotation's own VoiceOver text, exactly as
+                    // it was when these events were `Marker`s: the sign replaces the
+                    // tinted dot, not the words.
+                    Annotation(marker.kind.debriefTitle,
+                               coordinate: MapFit.coordinate(marker.coordinate)) {
+                        RoadSign(kind: EventSign.sign(for: marker.kind), size: 26)
+                    }
                 }
             }
-            .frame(height: 240)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        } else if !markerCoordinates.isEmpty {
-            // No track, but the events still know where they happened: showing
-            // only the markers is honest and better than an empty card.
-            Map(initialPosition: .region(MapFit.region(for: markerCoordinates))) {
-                ForEach(summary.markers) { marker in
-                    Marker(
-                        marker.kind.debriefTitle,
-                        systemImage: marker.kind.debriefSystemImage,
-                        coordinate: MapFit.coordinate(marker.coordinate)
-                    )
-                    .tint(marker.kind.debriefTint)
-                }
-            }
-            .frame(height: 240)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(height: 260)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         } else {
             PlaceholderCard(
                 systemImage: "map",
@@ -137,48 +121,89 @@ struct DriveDebriefView: View {
         }
     }
 
+    // MARK: - Score
+
+    private var headlineSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .bottom, spacing: 12) {
+                KmPost(
+                    value: DriveFormat.score(summary.score),
+                    capColor: Color.drivySignRed,
+                    isToday: true,
+                    size: KmPostSize.score
+                )
+
+                Text("Driver Score")
+                    .font(.drivyTitle)
+                    .foregroundStyle(Color.drivyInk)
+
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+
+            HStack(alignment: .top, spacing: 16) {
+                DriveQuietFigure(title: "Distancia", value: DriveFormat.distance(summary.distanceKm))
+                DriveQuietFigure(
+                    title: "Duración",
+                    value: DriveFormat.duration(TimeInterval(summary.durationSeconds))
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     // MARK: - Events
 
     private var eventsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Qué ha contado el resumen")
-                .font(.headline)
+                .font(.drivyHeadline)
+                .foregroundStyle(Color.drivyInk)
+                .padding(.bottom, 8)
 
-            ForEach(summary.eventRows) { row in
-                HStack(spacing: 12) {
-                    Label(row.kind.debriefTitle, systemImage: row.kind.debriefSystemImage)
-                        .font(.subheadline)
-
-                    Spacer(minLength: 0)
-
-                    Text("\(row.count)")
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
+            ForEach(Array(summary.eventRows.enumerated()), id: \.element.id) { index, row in
+                if index > 0 {
+                    DriveHairlineRule().padding(.vertical, 6)
                 }
+
+                DriveEventSignRow(row: row)
             }
         }
-        .drivyCard()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Advice
 
     private var adviceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(summary.tip.title, systemImage: summary.tip.systemImage)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            DriveHairlineRule()
 
-            Text(summary.tip.message)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 12) {
+                RoadSign(kind: summary.tip.infoSign, size: 28)
 
-            if let note = summary.connectedNote {
-                Text(note)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(summary.tip.title)
+                        .font(.drivyBodyStrong)
+                        .foregroundStyle(Color.drivyInk)
+
+                    Text(summary.tip.message)
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyInkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let note = summary.connectedNote {
+                        Text(note)
+                            .font(.drivyFootnote)
+                            .foregroundStyle(Color.drivyInkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: 0)
             }
+            .accessibilityElement(children: .combine)
         }
-        .drivyCard()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Actions
@@ -191,6 +216,95 @@ struct DriveDebriefView: View {
         didClose = true
         onClose()
         NotificationPermission.requestAfterFirstLesson()
+    }
+}
+
+// MARK: - The drive vocabulary shared by debrief and detail
+
+/// The dashboard row of a drive: one tell-tale per event kind, lit when that kind
+/// happened, with its count underneath (S5).
+///
+/// The four lamps always come in `DriveEventKind.allCases` order — the order
+/// `DebriefSummary` already publishes — so the row never reshuffles between drives
+/// and lines up with the list underneath it.
+struct DriveEventLampRow: View {
+
+    let rows: [DebriefEventRow]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ForEach(rows) { row in
+                WarningLamp(
+                    systemName: row.kind.debriefSystemImage,
+                    isLit: row.count > 0,
+                    caption: "\(row.count)",
+                    accessibilityLabel: "\(row.kind.debriefTitle): \(row.count)"
+                )
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// One event kind in the list of the drive: its road sign, its name, how many.
+struct DriveEventSignRow: View {
+
+    let row: DebriefEventRow
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoadSign(kind: EventSign.sign(for: row.kind), size: 28)
+
+            Text(row.kind.debriefTitle)
+                .font(.drivyBody)
+                .foregroundStyle(Color.drivyInk)
+
+            Spacer(minLength: 0)
+
+            Text("\(row.count)")
+                .font(.drivyBodyStrong.monospacedDigit())
+                .foregroundStyle(row.count > 0 ? Color.drivyInk : Color.drivyInkMuted)
+        }
+        .frame(minHeight: 44)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A labelled figure with no card: the small name above the value (S3 prefers
+/// proximity and rules over tiles).
+struct DriveQuietFigure: View {
+
+    let title: String
+
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.drivyKicker)
+                .foregroundStyle(Color.drivyInkMuted)
+
+            Text(value)
+                .font(.drivyBodyStrong)
+                .monospacedDigit()
+                .foregroundStyle(Color.drivyInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The hairline that separates two rows of the same list (S3).
+struct DriveHairlineRule: View {
+
+    var body: some View {
+        Rectangle()
+            .fill(Color.drivyRule)
+            .frame(height: 1)
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
     }
 }
 
@@ -212,6 +326,9 @@ extension DriveEventKind {
         }
     }
 
+    /// The pictogram the dashboard lamp of this kind wears. The sign of the event
+    /// on the map and in the list comes from `EventSign`; this is the second,
+    /// mechanical half of the same message.
     var debriefSystemImage: String {
         switch self {
         case .harshBrake:
@@ -224,15 +341,21 @@ extension DriveEventKind {
             return "iphone"
         }
     }
+}
 
-    /// Marker colour of the map: braking and speed in red, the rest in orange, so
-    /// the two hardest components stand out on the route.
-    var debriefTint: Color {
+extension DebriefTip {
+
+    /// The sign the advice block wears: always the blue information face, because
+    /// an advice is not a road hazard painted on the route (S3, S5). The four
+    /// advice of an event keep that event's own pictogram, the same one its
+    /// dashboard lamp shows; a clean drive gets a bare checkmark, because
+    /// `checkmark.seal.fill` would put a second shape inside the panel.
+    var infoSign: RoadSign.Kind {
         switch self {
-        case .harshBrake, .speeding:
-            return .red
-        case .harshAcceleration, .phoneUse:
-            return .orange
+        case .harshBrake, .harshAcceleration, .speeding, .phoneUse:
+            return .info(systemName: systemImage)
+        case .clean:
+            return .info(systemName: "checkmark")
         }
     }
 }
