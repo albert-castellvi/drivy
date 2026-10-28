@@ -45,6 +45,9 @@ private func renderGallerySheet<V: View>(
     let page = sheet
         .frame(width: width, height: height)
         .background(Color.drivyPaper)
+        // Same root modifiers as `DrivyApp`, so a sheet shows what the app shows.
+        .tint(Color.drivyTint)
+        .font(.drivyBody)
         .environment(\.colorScheme, scheme)
         .preferredColorScheme(scheme)
 
