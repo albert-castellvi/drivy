@@ -81,7 +81,7 @@ enum HabitPathEngine {
     static let levelRequirements = [3, 7, 15]
 
     /// S4: what one level pays, decided by the server (`xp_ledger` in
-    /// `0002_duolingo_loop.sql`). Shown here, never granted here.
+    /// `20261028084225_0002_duolingo_loop.sql`). Shown here, never granted here.
     static let xpPerLevel = 50
 
     /// Floor of the `drives(since:)` read. Unit 1 counts every drive (S3) and the

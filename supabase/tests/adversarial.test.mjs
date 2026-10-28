@@ -1,4 +1,4 @@
-// Adversarial probes for migration 0002_duolingo_loop.sql (T1 of
+// Adversarial probes for migration 20261028084225_0002_duolingo_loop.sql (T1 of
 // odd/tasks/duolingo-loop.md). Independent verification: RLS holes, security
 // definer hygiene, XP ledger boundaries (S4) and public-league settlement (S5).
 //

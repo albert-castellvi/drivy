@@ -79,6 +79,16 @@ async function addDrive(db, userID, { km, score, daysAgo = 0 }) {
   );
 }
 
+// Supabase records each applied migration by the 14-digit version in its file
+// name; a file without it cannot be matched with the remote history.
+test('every migration file is named <14-digit version>_<name>.sql', () => {
+  const files = readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
+  assert.ok(files.length > 0);
+  for (const file of files) {
+    assert.match(file, /^\d{14}_[a-z0-9_]+\.sql$/);
+  }
+});
+
 test('S10: league tables are readable without RLS recursion, and only by members', async () => {
   const db = await freshDatabase();
   const owner = await createUser(db, 'Owner');

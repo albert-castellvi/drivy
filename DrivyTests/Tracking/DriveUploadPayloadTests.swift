@@ -2,7 +2,7 @@ import XCTest
 @testable import Drivy
 
 /// The payload is the contract with `public.drives` and `public.daily_scores`
-/// (S10, migration `0001_drivy_init.sql`): these tests pin the exact column names
+/// (S10, migration `20261027125528_drivy_schema_v1.sql`): these tests pin the exact column names
 /// and the values that reach PostgREST, and prove no raw sample is part of it.
 final class DriveUploadPayloadTests: XCTestCase {
 

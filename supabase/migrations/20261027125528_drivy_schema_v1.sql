@@ -80,7 +80,6 @@ create index league_members_user_idx on public.league_members (user_id);
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
-set search_path = public
 as $$
 begin
   new.updated_at = now();
@@ -118,9 +117,6 @@ $$;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
-
--- Trigger function: never callable over PostgREST RPC
-revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 -- Join a league by invite code, enforcing the 25-member cap (S7)
 create or replace function public.join_league_by_code(p_code text)

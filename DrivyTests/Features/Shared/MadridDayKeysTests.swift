@@ -4,7 +4,7 @@ import XCTest
 /// B1 of the QA report: every day and week key that is written to Supabase, or
 /// compared with a server day, is built in Europe/Madrid, the zone the migration
 /// pins (`madrid_today()`, `madrid_week_start()`, the `day` CHECKs of
-/// `0002_duolingo_loop.sql`). The device zone is only for display.
+/// `20261028084225_0002_duolingo_loop.sql`). The device zone is only for display.
 final class MadridDayKeysTests: XCTestCase {
 
     /// Atlantic/Canary, one hour behind Madrid in winter.
