@@ -27,7 +27,11 @@ struct LeagueRecord: Decodable, Equatable, Identifiable {
     }
 }
 
-/// One row of `public.league_weekly_ranking(p_league_id, p_week_start)` (S7).
+/// One row of `public.league_weekly_ranking(p_league_id, p_week_start)` (S5).
+///
+/// Private leagues now rank by weekly XP, exactly like the public ones: the old
+/// distance-weighted score and the kilometres are gone, because any ranking that
+/// grows with the distance driven invites the user to drive more (S4).
 struct LeagueRankingRow: Decodable, Equatable, Identifiable {
 
     let rank: Int
@@ -36,39 +40,49 @@ struct LeagueRankingRow: Decodable, Equatable, Identifiable {
 
     let displayName: String
 
-    /// Distance-weighted average score of the week, 0…100.
-    let averageScore: Int
-
-    let totalKm: Double
+    /// XP earned inside the week the RPC was asked about (S4).
+    let weekXP: Int
 
     var id: String { userID }
+
+    /// What the row shows on its trailing side.
+    var xpText: String { LeagueXPText.format(weekXP) }
 
     enum CodingKeys: String, CodingKey {
         case rank
         case userID = "user_id"
         case displayName = "display_name"
-        case averageScore = "avg_score"
-        case totalKm = "total_km"
+        case weekXP = "week_xp"
     }
 
-    init(rank: Int, userID: String, displayName: String, averageScore: Int, totalKm: Double) {
+    init(rank: Int, userID: String, displayName: String, weekXP: Int) {
         self.rank = rank
         self.userID = userID
         self.displayName = displayName
-        self.averageScore = averageScore
-        self.totalKm = totalKm
+        self.weekXP = weekXP
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // `rank` is a bigint and `avg_score`/`total_km` are numerics, which
-        // PostgREST may serialize as numbers or as strings.
+        // `rank` and `week_xp` are bigints, which PostgREST may serialize as
+        // numbers or as strings.
         rank = try container.decodeInteger(forKey: .rank)
         userID = try container.decode(String.self, forKey: .userID)
         displayName = try container.decode(String.self, forKey: .displayName)
-        averageScore = try container.decodeInteger(forKey: .averageScore)
-        totalKm = try container.decodeDecimal(forKey: .totalKm)
+        weekXP = try container.decodeInteger(forKey: .weekXP)
+    }
+}
+
+/// The one number both rankings sort by (S4), printed the same way in each of
+/// them so the user reads a single currency.
+///
+/// Deliberately not locale-driven, like `DriveFormat`: the string is asserted in
+/// tests and stays the same everywhere.
+enum LeagueXPText {
+
+    static func format(_ xp: Int) -> String {
+        "\(xp) XP"
     }
 }
 

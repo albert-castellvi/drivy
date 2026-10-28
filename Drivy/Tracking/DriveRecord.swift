@@ -2,7 +2,7 @@ import Foundation
 
 /// Summary of one finished drive: the only drive data that leaves the device
 /// (S10, "las muestras crudas de GPS/Motion se suben resumidas"). It maps 1:1 to
-/// a `public.drives` row.
+/// a `public.drives` row, except for `events`, which stay on the phone (S2, S12).
 struct DriveRecord: Equatable {
 
     let startedAt: Date
@@ -29,7 +29,19 @@ struct DriveRecord: Equatable {
 
     let summary: DriveSummary
 
-    init(score: DriveScore, startedAt: Date) {
+    /// S2: every event the score counted, in time order, with the coordinate of
+    /// the fix it happened on when the route of this device was available at the
+    /// moment of stopping.
+    ///
+    /// Local only and deliberately absent from `DriveRowPayload`: no coordinate
+    /// is ever uploaded (S10, S12). It lives on the record so the post-drive
+    /// summary can draw the events on the route without asking the engine again.
+    let events: [DriveEvent]
+
+    /// `events` defaults to the ones the engine already counted on `score`; the
+    /// parameter exists for the caller that holds a different set (a re-score) and
+    /// so every previous call site keeps working unchanged.
+    init(score: DriveScore, startedAt: Date, events: [DriveEvent]? = nil) {
         let duration = max(1, Int(score.durationSeconds.rounded()))
 
         self.startedAt = startedAt
@@ -44,6 +56,7 @@ struct DriveRecord: Equatable {
         self.speedingEvents = score.speedingEvents
         self.connectedMode = score.connectedMode
         self.summary = DriveSummary(score: score)
+        self.events = events ?? score.events
     }
 }
 

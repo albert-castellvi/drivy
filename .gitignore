@@ -20,3 +20,6 @@ TestResults/
 .swiftpm/
 .build/
 Packages/
+
+# Supabase SQL tests (supabase/tests)
+node_modules/

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// One league (S7): the weekly ranking plus the invite link that brings friends in.
+/// One private league (S5): the weekly XP ranking plus the invite link that
+/// brings friends in.
 struct LeagueDetailView: View {
 
     let league: LeagueRecord
@@ -29,7 +30,7 @@ struct LeagueDetailView: View {
     private var rankingSection: some View {
         Section {
             if model.rows.isEmpty && !model.isLoading {
-                Text("Aún no hay trayectos esta semana. En cuanto alguien conduzca, aparece aquí.")
+                Text("Aún no hay XP esta semana. En cuanto alguien puntúe, aparece aquí.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -46,7 +47,7 @@ struct LeagueDetailView: View {
         } header: {
             Text(model.weekStartLabel.isEmpty ? "Semana actual" : "Semana del \(model.weekStartLabel)")
         } footer: {
-            Text("Ranking por Driver Score medio de la semana; los kilómetros desempatan.")
+            Text("Clasificación por XP de la semana. El XP se gana conduciendo bien y con lecciones, nunca por conducir más.")
         }
     }
 
@@ -56,19 +57,13 @@ struct LeagueDetailView: View {
                 .font(.headline.monospacedDigit())
                 .frame(width: 28, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.displayName)
-                    .font(.subheadline.weight(isCurrentUser(row) ? .bold : .regular))
-
-                Text(DriveFormat.distance(row.totalKm))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text(row.displayName)
+                .font(.subheadline.weight(isCurrentUser(row) ? .bold : .regular))
 
             Spacer(minLength: 0)
 
-            Text(DriveFormat.score(row.averageScore))
-                .font(.title3.monospacedDigit().weight(.semibold))
+            Text(row.xpText)
+                .font(.headline.monospacedDigit())
         }
         .foregroundStyle(isCurrentUser(row) ? Color.accentColor : Color.primary)
     }

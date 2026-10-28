@@ -1,8 +1,8 @@
 import XCTest
 @testable import Drivy
 
-/// The league detail ranking (S7): the current ISO week, straight from
-/// `public.league_weekly_ranking`.
+/// The league detail ranking (S5): the current ISO week, straight from
+/// `public.league_weekly_ranking`, ordered by weekly XP.
 @MainActor
 final class LeagueRankingViewModelTests: XCTestCase {
 
@@ -28,18 +28,23 @@ final class LeagueRankingViewModelTests: XCTestCase {
         return (sut, fake)
     }
 
-    private func row(_ rank: Int, _ userID: String, _ name: String) -> LeagueRankingRow {
-        LeagueRankingRow(rank: rank, userID: userID, displayName: name, averageScore: 90, totalKm: 20)
+    private func row(_ rank: Int, _ userID: String, _ name: String, xp: Int = 150) -> LeagueRankingRow {
+        LeagueRankingRow(rank: rank, userID: userID, displayName: name, weekXP: xp)
     }
 
     func testLoadPublishesTheWeeklyRows() async {
         let (sut, fake) = makeSUT()
-        fake.rankingOutcome = .success([row(1, "user-a", "Ana"), row(2, "user-b", "Bruno")])
+        fake.rankingOutcome = .success([
+            row(1, "user-a", "Ana", xp: 210),
+            row(2, "user-b", "Bruno", xp: 90)
+        ])
 
         await sut.load()
 
         XCTAssertEqual(sut.rows.count, 2)
         XCTAssertEqual(sut.rows.first?.displayName, "Ana")
+        XCTAssertEqual(sut.rows.first?.weekXP, 210)
+        XCTAssertEqual(sut.rows.first?.xpText, "210 XP")
         XCTAssertNil(sut.errorMessage)
         XCTAssertFalse(sut.isLoading)
     }

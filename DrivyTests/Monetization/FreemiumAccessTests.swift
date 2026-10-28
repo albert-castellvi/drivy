@@ -135,4 +135,92 @@ final class FreemiumAccessTests: XCTestCase {
         XCTAssertTrue(sut.isWithinFullHistoryGrace)
         XCTAssertTrue(sut.canViewHistory(date: PremiumFixtures.date(anchorOffsetDays: -5)))
     }
+
+    // MARK: - Streak freezes (S1/S8)
+
+    func testWeeklyFreezesMatchS8() {
+        XCTAssertEqual(FreemiumLimits.freeWeeklyFreezes, 1)
+        XCTAssertEqual(FreemiumLimits.premiumWeeklyFreezes, 3)
+        XCTAssertEqual(FreemiumLimits.weeklyFreezes(for: .free), 1)
+        XCTAssertEqual(FreemiumLimits.weeklyFreezes(for: .premium), 3)
+
+        XCTAssertEqual(access(plan: .free, nowOffsetDays: 0).weeklyFreezes, 1)
+        XCTAssertEqual(access(plan: .premium, nowOffsetDays: 0).weeklyFreezes, 3)
+    }
+
+    // MARK: - Streak repair (S8)
+
+    /// 2026-03-04 12:00 UTC.
+    private var repairNow: Date {
+        PremiumFixtures.date(anchorOffsetDays: 3, hour: 12)
+    }
+
+    /// 2026-03-03 09:00 UTC: the day that broke the run, still inside the 48 h
+    /// window of the repair.
+    private var brokenYesterday: Date {
+        PremiumFixtures.date(anchorOffsetDays: 2, hour: 9)
+    }
+
+    private func repairAccess(plan: FreemiumPlan) -> FreemiumAccess {
+        FreemiumAccess(
+            plan: plan,
+            anchorDate: PremiumFixtures.anchorDate,
+            now: repairNow,
+            calendar: calendar
+        )
+    }
+
+    func testTheRepairWindowAndCooldownMatchS8() {
+        XCTAssertEqual(FreemiumLimits.streakRepairWindowHours, 48)
+        XCTAssertEqual(FreemiumLimits.streakRepairCooldownDays, 30)
+    }
+
+    /// S8: repairing the streak is a Premium advantage.
+    func testTheFreePlanCannotRepairTheStreak() {
+        let sut = repairAccess(plan: .free)
+
+        XCTAssertFalse(
+            sut.canRepairStreak(brokenDay: brokenYesterday, lastRepairAt: nil, now: repairNow)
+        )
+    }
+
+    func testPremiumCanRepairABreakInsideTheWindow() {
+        let sut = repairAccess(plan: .premium)
+
+        XCTAssertTrue(
+            sut.canRepairStreak(brokenDay: brokenYesterday, lastRepairAt: nil, now: repairNow)
+        )
+    }
+
+    /// S8: the 48 h window is counted from the end of the broken day.
+    func testPremiumCannotRepairABreakOlderThanTheWindow() {
+        let sut = repairAccess(plan: .premium)
+        let tooOld = PremiumFixtures.date(anchorOffsetDays: 0, hour: 9)
+
+        XCTAssertFalse(
+            sut.canRepairStreak(brokenDay: tooOld, lastRepairAt: nil, now: repairNow)
+        )
+    }
+
+    func testThereIsNothingToRepairWithoutABrokenDay() {
+        let sut = repairAccess(plan: .premium)
+
+        XCTAssertFalse(
+            sut.canRepairStreak(brokenDay: nil, lastRepairAt: nil, now: repairNow)
+        )
+    }
+
+    /// S8: "una vez cada 30 días".
+    func testPremiumCannotRepairTwiceInsideThirtyDays() {
+        let sut = repairAccess(plan: .premium)
+        let tenDaysAgo = calendar.date(byAdding: .day, value: -10, to: repairNow) ?? repairNow
+        let thirtyOneDaysAgo = calendar.date(byAdding: .day, value: -31, to: repairNow) ?? repairNow
+
+        XCTAssertFalse(
+            sut.canRepairStreak(brokenDay: brokenYesterday, lastRepairAt: tenDaysAgo, now: repairNow)
+        )
+        XCTAssertTrue(
+            sut.canRepairStreak(brokenDay: brokenYesterday, lastRepairAt: thirtyOneDaysAgo, now: repairNow)
+        )
+    }
 }

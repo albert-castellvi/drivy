@@ -1,0 +1,12 @@
+{
+  "name": "drivy-supabase-tests",
+  "private": true,
+  "type": "module",
+  "description": "Runs the SQL migrations on PGlite (Postgres in WASM) and checks RLS, XP and leagues.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  }
+}

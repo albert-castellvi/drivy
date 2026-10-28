@@ -7,6 +7,10 @@ struct ShareCardSheet: View {
 
     let userID: String
 
+    /// Plan in force: the freezes of the streak depend on it (S1/S8), and the card
+    /// must print the same streak the Hoy tab prints.
+    @EnvironmentObject private var freemium: FreemiumService
+
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var model = ShareCardViewModel()
@@ -25,8 +29,14 @@ struct ShareCardSheet: View {
                     Button("Cerrar") { dismiss() }
                 }
             }
-            .task(id: userID) { await load() }
+            .task(id: loadID) { await load() }
         }
+    }
+
+    /// Reloads when the user changes and when the plan arrives: before StoreKit
+    /// answers, the card would count the free allowance.
+    private var loadID: String {
+        "\(userID)|\(freemium.plan?.rawValue ?? "unknown")"
     }
 
     @ViewBuilder
@@ -74,7 +84,7 @@ struct ShareCardSheet: View {
     private func load() async {
         guard !userID.isEmpty else { return }
 
-        await model.load(userID: userID)
+        await model.load(userID: userID, plan: freemium.plan)
         guard let card = model.card else { return }
 
         // Rendering is explicit instead of implicit so the share sheet gets a
@@ -85,4 +95,5 @@ struct ShareCardSheet: View {
 
 #Preview {
     ShareCardSheet(userID: "")
+        .environmentObject(FreemiumService(anchorDate: Date()))
 }

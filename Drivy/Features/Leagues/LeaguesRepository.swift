@@ -13,8 +13,29 @@ protocol LeaguesDataLoading {
     /// returns the league id. Failures are thrown as `LeagueJoinFailure`.
     func joinLeague(inviteCode: String) async throws -> String
 
-    /// Calls `public.league_weekly_ranking(p_league_id, p_week_start)`.
+    /// Calls `public.league_weekly_ranking(p_league_id, p_week_start)`, which
+    /// ranks the members of the league by weekly XP (S5).
     func weeklyRanking(leagueID: String, weekStart: String) async throws -> [LeagueRankingRow]
+
+    // MARK: - Public leagues (S5)
+
+    /// Calls `public.set_public_league_opt_in(p_on)`. `false` also leaves the
+    /// current week's group, so the name disappears from it.
+    func setPublicLeagueOptIn(_ on: Bool) async throws
+
+    /// Own row of `public.public_league_entries`: the decision and the division.
+    /// `nil` means the user never decided.
+    func publicLeagueStatus() async throws -> PublicLeagueStatus?
+
+    /// Calls `public.public_league_current()`, which lazily settles the previous
+    /// week and places the caller in a group. Throws
+    /// `PublicLeagueFailure.notOptedIn` when the server says there is no
+    /// opted-in entry.
+    func currentPublicLeague() async throws -> PublicLeagueCurrent
+
+    /// Calls `public.public_league_ranking()`: the standings of the caller's
+    /// group this week, best place first.
+    func publicLeagueRanking() async throws -> [PublicLeagueRankingRow]
 }
 
 /// Server-side exceptions of `public.join_league_by_code` (S7) plus the copy the
@@ -55,16 +76,44 @@ enum LeagueJoinFailure: Error, Equatable {
     }
 }
 
+/// Server-side exception of `public.public_league_current()` (S5), mapped like
+/// `LeagueJoinFailure`: the RPC raises a bare exception string, so the mapping
+/// reads the PostgREST error description.
+///
+/// It carries no copy on purpose: being not opted in is a state the screen
+/// renders (the invitation or nothing), not a sentence the user has to read,
+/// and the view model owns the messages of the failures that are errors.
+enum PublicLeagueFailure: Error, Equatable {
+
+    /// The caller has no opted-in entry (`raise exception 'not_opted_in'`).
+    case notOptedIn
+
+    case unknown
+
+    /// `nil` when the message is not one of the exceptions this feature knows:
+    /// the caller decides what an unexpected failure means.
+    static func from(serverMessage message: String) -> PublicLeagueFailure? {
+        let normalized = message.lowercased()
+
+        if normalized.contains("not_opted_in") {
+            return .notOptedIn
+        }
+        return nil
+    }
+}
+
 enum LeagueRepositoryError: Error, Equatable {
     /// The insert worked but PostgREST returned no row to read the code from.
     case emptyInsert
 }
 
-/// S10 write/read path of the Ligas tab.
+/// Write/read path of the Ligas tab (S5, S10).
 ///
 /// Row Level Security already limits `leagues` to the ones the user owns or
-/// belongs to, so the list needs no extra membership filter; the two RPCs are
-/// `security definer` functions that check the caller themselves.
+/// belongs to, so the list needs no extra membership filter; the RPCs are
+/// `security definer` functions that check the caller themselves. The public
+/// league tables have no client-writable policy at all: every public read and
+/// write goes through the RPCs below.
 struct SupabaseLeaguesRepository: LeaguesDataLoading {
 
     private let client: SupabaseClient
@@ -133,6 +182,58 @@ struct SupabaseLeaguesRepository: LeaguesDataLoading {
                 "league_weekly_ranking",
                 params: ["p_league_id": leagueID, "p_week_start": weekStart]
             )
+            .execute()
+            .value
+
+        return rows
+    }
+
+    // MARK: - Public leagues (S5)
+
+    func setPublicLeagueOptIn(_ on: Bool) async throws {
+        try await client
+            .rpc("set_public_league_opt_in", params: ["p_on": on])
+            .execute()
+    }
+
+    func publicLeagueStatus() async throws -> PublicLeagueStatus? {
+        // The select policy of the table only exposes the own row, so an empty
+        // answer means the user never decided.
+        let rows: [PublicLeagueStatus] = try await client
+            .from("public_league_entries")
+            .select("division,opted_in")
+            .execute()
+            .value
+
+        return rows.first
+    }
+
+    func currentPublicLeague() async throws -> PublicLeagueCurrent {
+        let rows: [PublicLeagueCurrent]
+
+        do {
+            rows = try await client
+                .rpc("public_league_current")
+                .execute()
+                .value
+        } catch {
+            if let failure = PublicLeagueFailure.from(serverMessage: String(describing: error)) {
+                throw failure
+            }
+            throw PublicLeagueFailure.unknown
+        }
+
+        // The function returns exactly one row; an empty one would be a server
+        // contract break, not a user-facing failure worth its own copy.
+        guard let current = rows.first else {
+            throw PublicLeagueFailure.unknown
+        }
+        return current
+    }
+
+    func publicLeagueRanking() async throws -> [PublicLeagueRankingRow] {
+        let rows: [PublicLeagueRankingRow] = try await client
+            .rpc("public_league_ranking")
             .execute()
             .value
 

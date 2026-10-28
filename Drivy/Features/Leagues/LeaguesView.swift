@@ -1,9 +1,14 @@
 import SwiftUI
 
-/// Tab "Ligas" (S7): the user's leagues, creation and join by code.
+/// Tab "Ligas" (S5): the public league of the week, the user's private leagues,
+/// creation and join by code.
 ///
-/// S9: the free plan allows one league, created or joined, so both actions go
-/// through `LeagueLimitGate` and a blocked action offers the paywall instead.
+/// Order matters: the public league is the main competition, the private ones
+/// are the extra the spec keeps ("Las ligas privadas se mantienen como extra").
+///
+/// S9: the free plan allows one private league, created or joined, so both
+/// actions go through `LeagueLimitGate` and a blocked action offers the paywall
+/// instead. The public league is not affected by that cap.
 struct LeaguesView: View {
 
     @EnvironmentObject private var auth: AuthViewModel
@@ -12,6 +17,10 @@ struct LeaguesView: View {
     @EnvironmentObject private var freemium: FreemiumService
 
     @StateObject private var model = LeaguesViewModel()
+
+    /// Public league state (S5): undecided, opted in or opted out.
+    @StateObject private var publicLeague = PublicLeagueViewModel()
+
     @State private var activeSheet: ActiveSheet?
     @State private var joinCode = ""
 
@@ -25,6 +34,7 @@ struct LeaguesView: View {
     var body: some View {
         NavigationStack {
             List {
+                publicLeagueSections
                 leaguesSection
                 limitSection
                 joinSection
@@ -56,8 +66,25 @@ struct LeaguesView: View {
 
     // MARK: - Sections
 
+    /// S5, L9: the invitation while the question is unanswered, the group of the
+    /// week once opted in, and nothing at all after an explicit "no".
+    @ViewBuilder
+    private var publicLeagueSections: some View {
+        switch publicLeague.decision {
+        case .undecided:
+            PublicLeagueInvitationCard(model: publicLeague)
+        case .optedIn:
+            PublicLeaguePanel(
+                model: publicLeague,
+                currentUserID: auth.signedInUser?.id
+            )
+        case .optedOut:
+            EmptyView()
+        }
+    }
+
     private var leaguesSection: some View {
-        Section("Tus ligas") {
+        Section("Tus ligas privadas") {
             if model.leagues.isEmpty && !model.isLoading {
                 Text("Aún no estás en ninguna liga. Crea una o únete con un código.")
                     .font(.subheadline)
@@ -148,11 +175,11 @@ struct LeaguesView: View {
                 }
                 activeSheet = .createLeague
             } label: {
-                Label("Crear liga", systemImage: "plus.circle.fill")
+                Label("Crear liga privada", systemImage: "plus.circle.fill")
             }
             .disabled(model.isCreating)
         } footer: {
-            Text("Compite con hasta 25 amigos por el mejor Driver Score de la semana.")
+            Text("Compite con hasta 25 amigos por el mayor XP de la semana. El XP se gana conduciendo bien y con lecciones, nunca por conducir más.")
         }
     }
 
@@ -164,6 +191,7 @@ struct LeaguesView: View {
 
     private func reload() async {
         guard let userID = auth.signedInUser?.id else { return }
+        await publicLeague.load()
         await model.load(userID: userID)
     }
 

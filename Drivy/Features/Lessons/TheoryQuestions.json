@@ -1,0 +1,662 @@
+[
+  {
+    "id": "junction_without_signs",
+    "text": "Llegas a un cruce sin señales ni marcas viales y no hay nadie más. ¿Quién tiene la prioridad?",
+    "options": [
+      "Yo, porque circulo por una vía más ancha",
+      "El vehículo que llegue por mi derecha",
+      "El vehículo que llegue primero al cruce"
+    ],
+    "correct": 1,
+    "explanation": "Sin señales que digan lo contrario, la norma general es ceder el paso a quien llega por la derecha."
+  },
+  {
+    "id": "roundabout_priority",
+    "text": "Vas a entrar en una glorieta. ¿A quién hay que ceder el paso?",
+    "options": [
+      "A los vehículos que ya están circulando dentro",
+      "A los que entran a la vez que yo",
+      "A nadie: al entrar en la glorieta tengo preferencia"
+    ],
+    "correct": 0,
+    "explanation": "En una glorieta tiene prioridad quien ya está dentro, y quien se incorpora es el que cede el paso."
+  },
+  {
+    "id": "stop_full_stop",
+    "text": "Llegas a una señal de STOP y no viene ningún vehículo. ¿Qué debes hacer?",
+    "options": [
+      "Detenerme por completo antes de la línea y después continuar",
+      "Reducir la velocidad y seguir si la vía está despejada",
+      "Detenerme solo si hay tráfico"
+    ],
+    "correct": 0,
+    "explanation": "El STOP obliga a detenerse siempre, haya o no otros vehículos."
+  },
+  {
+    "id": "yield_sign_meaning",
+    "text": "¿Qué significa la señal de «ceda el paso»?",
+    "options": [
+      "Que hay que detenerse siempre antes de la línea",
+      "Que hay que ceder el paso sin necesidad de detenerse si la vía está libre",
+      "Que mi vía tiene prioridad sobre las demás"
+    ],
+    "correct": 1,
+    "explanation": "Con «ceda el paso» basta con no obligar a frenar a los demás, aunque se puede parar del todo si hace falta."
+  },
+  {
+    "id": "roundabout_exit_signal",
+    "text": "En una glorieta de varios giros, ¿cuándo se señaliza la salida?",
+    "options": [
+      "Al entrar en la glorieta",
+      "Después de pasar la salida anterior a la mía",
+      "No hace falta señalizar dentro de la glorieta"
+    ],
+    "correct": 1,
+    "explanation": "La salida se indica con el intermitente derecho una vez pasada la salida anterior a la que se va a tomar."
+  },
+  {
+    "id": "emergency_vehicle_passage",
+    "text": "Se acerca una ambulancia con las luces y la sirena en marcha. ¿Qué haces?",
+    "options": [
+      "Mantener la velocidad y el carril para no hacer maniobras raras",
+      "Facilitar el paso y detenerme a la derecha si es necesario",
+      "Acelerar para dejarle sitio más adelante"
+    ],
+    "correct": 1,
+    "explanation": "Los vehículos de emergencia con señal luminosa y acústica tienen prioridad y hay que facilitarles el paso."
+  },
+  {
+    "id": "traffic_light_amber",
+    "text": "El semáforo pasa a ámbar cuando te acercas. ¿Qué debes hacer?",
+    "options": [
+      "Detenerme, salvo que ya no pueda hacerlo sin peligro",
+      "Acelerar para pasar antes de que llegue el rojo",
+      "Continuar a la misma velocidad, porque el ámbar no prohíbe nada"
+    ],
+    "correct": 0,
+    "explanation": "El ámbar fijo obliga a parar como el rojo cuando la detención se puede hacer con seguridad."
+  },
+  {
+    "id": "traffic_light_flashing_amber",
+    "text": "Un semáforo en ámbar intermitente significa que…",
+    "options": [
+      "Debo detenerme siempre antes de la línea",
+      "Puedo pasar sin mirar, porque la vía está libre",
+      "Debo extremar la precaución y aplicar las normas generales"
+    ],
+    "correct": 2,
+    "explanation": "El ámbar intermitente no regula el cruce: avisa de precaución y se aplican las señales y las normas generales."
+  },
+  {
+    "id": "crosswalk_pedestrian_priority",
+    "text": "Te acercas a un paso de peatones marcado y una persona está cruzando. ¿Quién tiene prioridad?",
+    "options": [
+      "El peatón",
+      "El vehículo, si voy por una vía principal",
+      "Nadie: hay que repartirse el espacio"
+    ],
+    "correct": 0,
+    "explanation": "En un paso de peatones señalizado la prioridad es de los peatones y hay que detenerse."
+  },
+  {
+    "id": "turning_and_pedestrians",
+    "text": "Giras a la derecha para entrar en una calle y hay peatones cruzando por el paso de esa calle. ¿Qué haces?",
+    "options": [
+      "Cederles el paso antes de completar el giro",
+      "Terminar el giro para no bloquear el cruce",
+      "Tocar el claxon para que se aparten"
+    ],
+    "correct": 0,
+    "explanation": "Al girar también hay que ceder el paso a los peatones que cruzan la vía a la que se entra."
+  },
+  {
+    "id": "speed_motorway",
+    "text": "¿Cuál es la velocidad máxima de un turismo en autovía o autopista?",
+    "options": [
+      "100 km/h",
+      "120 km/h",
+      "130 km/h"
+    ],
+    "correct": 1,
+    "explanation": "En autopistas y autovías la velocidad máxima de un turismo es de 120 km/h."
+  },
+  {
+    "id": "speed_conventional_road",
+    "text": "¿Qué velocidad máxima tiene un turismo en una carretera convencional con un carril por sentido?",
+    "options": [
+      "90 km/h",
+      "100 km/h",
+      "110 km/h"
+    ],
+    "correct": 0,
+    "explanation": "En las carreteras convencionales la velocidad máxima de un turismo es de 90 km/h."
+  },
+  {
+    "id": "speed_urban_two_lanes",
+    "text": "En una vía urbana con dos carriles por sentido, la velocidad máxima de un turismo es…",
+    "options": [
+      "30 km/h",
+      "50 km/h",
+      "60 km/h"
+    ],
+    "correct": 1,
+    "explanation": "En vías urbanas con dos o más carriles por sentido el límite genérico es de 50 km/h."
+  },
+  {
+    "id": "speed_urban_one_lane",
+    "text": "En una vía urbana de un solo carril por sentido, la velocidad máxima es…",
+    "options": [
+      "50 km/h",
+      "40 km/h",
+      "30 km/h"
+    ],
+    "correct": 2,
+    "explanation": "Las calles con un único carril por sentido tienen un límite genérico de 30 km/h."
+  },
+  {
+    "id": "speed_urban_single_platform",
+    "text": "En una calle de plataforma única, con la acera y la calzada al mismo nivel, la velocidad máxima es…",
+    "options": [
+      "20 km/h",
+      "30 km/h",
+      "50 km/h"
+    ],
+    "correct": 0,
+    "explanation": "En las calles de plataforma única el límite genérico baja a 20 km/h."
+  },
+  {
+    "id": "speed_motorway_minimum",
+    "text": "En autopista, con buen tiempo y poco tráfico, ¿puedes circular a 50 km/h?",
+    "options": [
+      "Sí, si no molesto a nadie",
+      "No: la velocidad mínima en autopista y autovía es de 60 km/h",
+      "Sí, siempre que no baje de 40 km/h"
+    ],
+    "correct": 1,
+    "explanation": "En autopistas y autovías no se puede circular por debajo de 60 km/h salvo que las circunstancias lo impongan."
+  },
+  {
+    "id": "safety_distance_tunnel",
+    "text": "Dentro de un túnel, ¿qué separación mínima hay que dejar con el vehículo de delante?",
+    "options": [
+      "Unos 20 metros",
+      "100 metros o 4 segundos",
+      "No hay una separación mínima"
+    ],
+    "correct": 1,
+    "explanation": "En túneles y pasos inferiores hay que dejar al menos 100 metros o 4 segundos con el vehículo de delante."
+  },
+  {
+    "id": "safety_distance_rain",
+    "text": "Con lluvia, la distancia de seguridad con el vehículo de delante debe ser…",
+    "options": [
+      "La misma que en seco",
+      "La mitad, porque se circula más despacio",
+      "Mayor que en seco"
+    ],
+    "correct": 2,
+    "explanation": "Con lluvia el coche frena peor y se ve menos, así que hay que aumentar la separación."
+  },
+  {
+    "id": "two_second_rule",
+    "text": "¿Para qué sirve la regla de los dos segundos?",
+    "options": [
+      "Para calcular una separación orientativa con el coche de delante",
+      "Para saber cuánto puede durar una parada de emergencia",
+      "Para medir la duración máxima de un adelantamiento"
+    ],
+    "correct": 0,
+    "explanation": "La regla de los dos segundos da una referencia sencilla de separación, y con mal tiempo conviene ampliarla."
+  },
+  {
+    "id": "speed_limit_is_a_maximum",
+    "text": "El límite de velocidad de una vía es…",
+    "options": [
+      "La velocidad a la que conviene circular",
+      "Una velocidad máxima que no se debe superar",
+      "Una velocidad mínima por debajo de la cual se sanciona"
+    ],
+    "correct": 1,
+    "explanation": "El límite es un máximo: la velocidad segura depende del tráfico, de la vía y del tiempo."
+  },
+  {
+    "id": "alcohol_rate_general",
+    "text": "¿Cuál es la tasa máxima de alcohol en aire espirado para un conductor que no es profesional?",
+    "options": [
+      "0,15 mg/l",
+      "0,25 mg/l",
+      "0,50 mg/l"
+    ],
+    "correct": 1,
+    "explanation": "El límite general es de 0,25 mg/l de alcohol en aire espirado, equivalente a 0,5 g/l en sangre."
+  },
+  {
+    "id": "alcohol_rate_novice",
+    "text": "Un conductor con menos de dos años de carné tiene una tasa de alcohol máxima de…",
+    "options": [
+      "0,15 mg/l en aire espirado",
+      "0,25 mg/l en aire espirado",
+      "0,50 mg/l en aire espirado"
+    ],
+    "correct": 0,
+    "explanation": "Los conductores noveles y los profesionales tienen un límite más bajo: 0,15 mg/l en aire espirado."
+  },
+  {
+    "id": "alcohol_effects",
+    "text": "Una sola consumición de alcohol antes de conducir…",
+    "options": [
+      "No afecta si se ha comido antes",
+      "Alarga el tiempo de reacción y estrecha el campo de visión",
+      "Solo afecta si se supera la tasa legal"
+    ],
+    "correct": 1,
+    "explanation": "El alcohol reduce reflejos y concentración desde la primera consumición, aunque la tasa sea legal."
+  },
+  {
+    "id": "alcohol_only_time",
+    "text": "¿Qué hace desaparecer antes el alcohol del organismo?",
+    "options": [
+      "Un café cargado",
+      "Una ducha fría o el aire de la ventanilla",
+      "Nada de eso: solo el tiempo"
+    ],
+    "correct": 2,
+    "explanation": "Ni el café ni la ducha eliminan alcohol: solo el tiempo lo hace desaparecer del organismo."
+  },
+  {
+    "id": "drugs_zero_tolerance",
+    "text": "Conducir después de consumir drogas…",
+    "options": [
+      "Está permitido si ya no noto sus efectos",
+      "Está prohibido siempre",
+      "Solo se sanciona si provoca un accidente"
+    ],
+    "correct": 1,
+    "explanation": "La presencia de drogas en el organismo al conducir está prohibida sin ninguna tolerancia."
+  },
+  {
+    "id": "fatigue_break_every_two_hours",
+    "text": "En un viaje largo, ¿cada cuánto conviene parar?",
+    "options": [
+      "Cada dos horas, unos 15 o 20 minutos",
+      "Cada cinco horas, media hora",
+      "Solo cuando aparezca sueño"
+    ],
+    "correct": 0,
+    "explanation": "Se recomienda descansar unos 15 o 20 minutos cada dos horas para mantener la atención."
+  },
+  {
+    "id": "fatigue_symptoms",
+    "text": "Notas bostezos, párpados pesados y te cuesta mantener la atención. Lo correcto es…",
+    "options": [
+      "Abrir la ventanilla y seguir el viaje",
+      "Parar a descansar en un lugar seguro",
+      "Subir la música y continuar"
+    ],
+    "correct": 1,
+    "explanation": "Esos avisos indican cansancio, y la única respuesta segura es detenerse y descansar."
+  },
+  {
+    "id": "fatigue_coffee_is_not_rest",
+    "text": "¿El café sustituye al descanso en un viaje?",
+    "options": [
+      "Sí, si se toma doble",
+      "Sí, durante unas horas",
+      "No: la cafeína no reemplaza el descanso"
+    ],
+    "correct": 2,
+    "explanation": "La cafeína da una sensación pasajera de alerta, pero no recupera el descanso que falta."
+  },
+  {
+    "id": "medication_and_driving",
+    "text": "El prospecto de un medicamento avisa de que puede afectar a la conducción. Debes…",
+    "options": [
+      "Conducir con más cuidado sin cambiar nada más",
+      "No conducir mientras dure el tratamiento si notas esos efectos",
+      "Reducir la dosis y conducir igualmente"
+    ],
+    "correct": 1,
+    "explanation": "Los medicamentos que advierten de efectos sobre la conducción obligan a no conducir si esos efectos aparecen."
+  },
+  {
+    "id": "hangover_next_morning",
+    "text": "A la mañana siguiente de beber mucho, aunque ya no quede alcohol en el cuerpo…",
+    "options": [
+      "El cansancio y la falta de concentración pueden seguir afectando a la conducción",
+      "Ya se puede conducir con total normalidad",
+      "Basta con beber mucha agua antes de conducir"
+    ],
+    "correct": 0,
+    "explanation": "La resaca deja cansancio y falta de atención, así que la conducción sigue siendo insegura."
+  },
+  {
+    "id": "seat_belt_all_occupants",
+    "text": "¿Quién está obligado a llevar el cinturón de seguridad?",
+    "options": [
+      "Solo el conductor y el copiloto",
+      "Todos los ocupantes, en todos los asientos que lo tengan",
+      "Solo los ocupantes de los asientos delanteros"
+    ],
+    "correct": 1,
+    "explanation": "El cinturón es obligatorio para todos los ocupantes, también en los asientos traseros y en ciudad."
+  },
+  {
+    "id": "child_under_135_cm",
+    "text": "Un niño de menos de 135 centímetros debe viajar…",
+    "options": [
+      "Con el cinturón del coche, como un adulto",
+      "Con un sistema de retención adecuado a su talla, en los asientos traseros",
+      "En el asiento del copiloto, siempre"
+    ],
+    "correct": 1,
+    "explanation": "Los menores de 135 cm necesitan un sistema de retención infantil adecuado y viajar en los asientos traseros."
+  },
+  {
+    "id": "child_seat_rear_facing_airbag",
+    "text": "¿Se puede colocar una silla a contramarcha en el asiento del copiloto?",
+    "options": [
+      "Sí, si el airbag del copiloto está desactivado",
+      "Sí, siempre que esté bien anclada",
+      "No, en ningún caso"
+    ],
+    "correct": 0,
+    "explanation": "Una silla a contramarcha solo puede ir delante si el airbag del copiloto está desactivado."
+  },
+  {
+    "id": "phone_in_hand",
+    "text": "¿Se puede usar el teléfono móvil sostenido con la mano mientras se conduce?",
+    "options": [
+      "Sí, si se va despacio",
+      "No, está prohibido",
+      "Sí, mientras no se circule por autovía"
+    ],
+    "correct": 1,
+    "explanation": "No se puede sostener el teléfono con la mano al conducir: es una distracción prohibida."
+  },
+  {
+    "id": "phone_hands_free",
+    "text": "El uso del manos libres durante la conducción…",
+    "options": [
+      "No es recomendable aunque sea posible: la conversación sigue distrayendo",
+      "Es exactamente igual que llevar el móvil en la mano",
+      "Es obligatorio si te llaman mientras conduces"
+    ],
+    "correct": 0,
+    "explanation": "El manos libres no obliga a sostener nada, pero la conversación sigue siendo una distracción."
+  },
+  {
+    "id": "earphones_while_driving",
+    "text": "Conducir con auriculares o cascos que reproducen sonido…",
+    "options": [
+      "Está permitido si el volumen es bajo",
+      "No es seguro y la norma lo prohíbe, porque aísla de lo que ocurre alrededor",
+      "Solo se permite en autopista, donde no hay peatones"
+    ],
+    "correct": 1,
+    "explanation": "Aislarse del sonido del entorno al conducir está prohibido: impide oír el claxon, las sirenas y avisos."
+  },
+  {
+    "id": "phone_at_red_light",
+    "text": "Detenido en un semáforo en rojo, con el motor en marcha, ¿puedes usar el móvil?",
+    "options": [
+      "Sí, mientras el coche no se mueva",
+      "No: la prohibición sigue vigente y la distracción también",
+      "Solo si el semáforo tarda mucho en cambiar"
+    ],
+    "correct": 1,
+    "explanation": "Estar parado en un semáforo no habilita a usar el móvil: la distracción sigue siendo peligrosa y sancionable."
+  },
+  {
+    "id": "helmet_on_motorbike",
+    "text": "El casco de protección es obligatorio para los ocupantes de una motocicleta…",
+    "options": [
+      "Solo en carretera, no en ciudad",
+      "Siempre, tanto en ciudad como en carretera",
+      "Solo para el conductor"
+    ],
+    "correct": 1,
+    "explanation": "Todos los ocupantes de una motocicleta deben llevar casco homologado en cualquier vía."
+  },
+  {
+    "id": "reflective_vest_first",
+    "text": "Tras una avería en una vía interurbana tienes que bajar del coche. Lo primero es…",
+    "options": [
+      "Ponerte el chaleco reflectante antes de salir",
+      "Salir y colocar la señal de emergencia",
+      "Quedarte dentro del coche hasta que llegue la grúa"
+    ],
+    "correct": 0,
+    "explanation": "El chaleco se pone antes de bajar, porque ser visible es lo que evita que te atropellen."
+  },
+  {
+    "id": "v16_on_the_roof",
+    "text": "¿Dónde se coloca la luz de emergencia V-16?",
+    "options": [
+      "En el suelo, a un metro del vehículo",
+      "En el techo del vehículo, lo más vertical posible",
+      "En el maletero, junto a la rueda de repuesto"
+    ],
+    "correct": 1,
+    "explanation": "La luz V-16 se coloca en el techo: se ve desde mucha más distancia y no hace falta bajarse del coche."
+  },
+  {
+    "id": "lights_in_tunnel",
+    "text": "Al circular por un túnel, aunque esté iluminado, un turismo debe llevar…",
+    "options": [
+      "Solo las luces de posición",
+      "La luz de cruce encendida",
+      "Ninguna luz, porque el túnel está iluminado"
+    ],
+    "correct": 1,
+    "explanation": "En túneles y pasos inferiores hay que llevar encendida la luz de cruce, aunque estén iluminados."
+  },
+  {
+    "id": "lights_night_urban",
+    "text": "De noche, también en vía urbana, hay que circular con…",
+    "options": [
+      "La luz de cruce encendida",
+      "Solo las luces de posición",
+      "Las luces de carretera"
+    ],
+    "correct": 0,
+    "explanation": "De noche la luz de cruce es obligatoria en todo tipo de vías."
+  },
+  {
+    "id": "lights_avoid_dazzling",
+    "text": "Si la luz de carretera puede deslumbrar a otro conductor…",
+    "options": [
+      "Cambio a la luz de cruce",
+      "Apago todas las luces un momento",
+      "Mantengo la de carretera para ver mejor"
+    ],
+    "correct": 0,
+    "explanation": "La luz de carretera no puede deslumbrar a otros usuarios de la vía, así que hay que cambiar a la de cruce."
+  },
+  {
+    "id": "lights_front_fog",
+    "text": "¿Cuándo se usan las luces antiniebla delanteras?",
+    "options": [
+      "Con niebla, lluvia muy intensa o condiciones parecidas",
+      "Siempre que oscurece",
+      "Solo dentro de túneles"
+    ],
+    "correct": 0,
+    "explanation": "La antiniebla delantera está pensada para fenómenos que reducen mucho la visibilidad."
+  },
+  {
+    "id": "lights_rear_fog",
+    "text": "La luz antiniebla trasera se enciende…",
+    "options": [
+      "Siempre que llueva",
+      "Solo cuando la visibilidad está muy reducida",
+      "Al circular de noche por ciudad"
+    ],
+    "correct": 1,
+    "explanation": "La antiniebla trasera deslumbra si se usa de más: solo cabe con visibilidad muy reducida."
+  },
+  {
+    "id": "hazard_lights",
+    "text": "Las luces de emergencia, los cuatro intermitentes, sirven para…",
+    "options": [
+      "Aparcar en doble fila un momento",
+      "Señalizar una inmovilización o un peligro",
+      "Circular por el arcén"
+    ],
+    "correct": 1,
+    "explanation": "Los cuatro intermitentes avisan de un vehículo inmovilizado o de un peligro, no de un aparcamiento rápido."
+  },
+  {
+    "id": "sign_triangle_danger",
+    "text": "Una señal con forma de triángulo y borde rojo indica…",
+    "options": [
+      "Peligro",
+      "Prohibición",
+      "Obligación"
+    ],
+    "correct": 0,
+    "explanation": "Los triángulos con borde rojo son señales de advertencia de peligro."
+  },
+  {
+    "id": "sign_red_circle_prohibition",
+    "text": "Una señal circular, con fondo blanco y borde rojo, indica…",
+    "options": [
+      "Peligro",
+      "Una prohibición o un límite",
+      "El final de una vía"
+    ],
+    "correct": 1,
+    "explanation": "Las señales circulares de borde rojo prohíben o limitan, como una velocidad máxima."
+  },
+  {
+    "id": "sign_octagon_stop",
+    "text": "Una señal octogonal roja con la palabra STOP obliga a…",
+    "options": [
+      "Detenerse por completo antes de la línea",
+      "Reducir la velocidad sin llegar a parar",
+      "Ceder el paso solo si viene otro vehículo"
+    ],
+    "correct": 0,
+    "explanation": "El STOP exige una detención completa, siempre y antes de la línea de detención."
+  },
+  {
+    "id": "overtake_on_blind_curve",
+    "text": "¿Se puede adelantar en una curva con poca visibilidad?",
+    "options": [
+      "Sí, si no hay línea continua",
+      "No, aunque no haya líneas que lo prohíban",
+      "Sí, si se toca el claxon antes"
+    ],
+    "correct": 1,
+    "explanation": "No se adelanta cuando no hay visibilidad suficiente, haya o no líneas de prohibición."
+  },
+  {
+    "id": "overtake_at_level_crossing",
+    "text": "¿Se puede adelantar justo en un paso a nivel?",
+    "options": [
+      "No, está prohibido",
+      "Sí, si las barreras están levantadas",
+      "Sí, si el tren acaba de pasar"
+    ],
+    "correct": 0,
+    "explanation": "En los pasos a nivel no se puede adelantar: el riesgo de quedar detenido sobre la vía es alto."
+  },
+  {
+    "id": "overtake_on_the_left",
+    "text": "Como norma general, ¿por dónde se adelanta?",
+    "options": [
+      "Por la izquierda",
+      "Por la derecha",
+      "Por el lado que tenga más espacio"
+    ],
+    "correct": 0,
+    "explanation": "Se adelanta por la izquierda, salvo los casos concretos que permite la norma, como un vehículo que gira a la izquierda."
+  },
+  {
+    "id": "breakdown_call_112",
+    "text": "Te quedas parado en el arcén de una autovía. ¿Cómo pides ayuda?",
+    "options": [
+      "Llamando al 112 e indicando el punto kilométrico y el sentido",
+      "Saliendo a la calzada para hacer señas",
+      "Esperando dentro del coche a que pase una grúa"
+    ],
+    "correct": 0,
+    "explanation": "El 112 coordina la ayuda, y el punto kilométrico y el sentido son lo que permite localizarte."
+  },
+  {
+    "id": "shoulder_is_for_emergencies",
+    "text": "¿Puedes detenerte en el arcén de una autovía para responder una llamada?",
+    "options": [
+      "Sí, si es muy corta",
+      "No: el arcén es solo para emergencias",
+      "Sí, si enciendo las luces de emergencia"
+    ],
+    "correct": 1,
+    "explanation": "El arcén no es una zona de descanso: parar allí por algo que no es una emergencia es una imprudencia."
+  },
+  {
+    "id": "motorway_on_ramp",
+    "text": "Al entrar en una autovía por el carril de aceleración…",
+    "options": [
+      "Tengo prioridad porque me estoy incorporando",
+      "Debo ceder el paso a los vehículos que ya circulan",
+      "Debo detenerme al final del carril antes de entrar"
+    ],
+    "correct": 1,
+    "explanation": "Quien se incorpora no tiene prioridad: hay que adaptar la velocidad y ceder el paso a quien circula."
+  },
+  {
+    "id": "keep_right_lane",
+    "text": "En una autovía con el carril derecho libre, ¿dónde se debe circular?",
+    "options": [
+      "Por el carril derecho",
+      "Por el carril izquierdo, que es más seguro",
+      "Por el central, para no encontrar camiones"
+    ],
+    "correct": 0,
+    "explanation": "Hay que circular por la derecha y usar el carril izquierdo solo para adelantar."
+  },
+  {
+    "id": "tyre_tread_depth",
+    "text": "El dibujo de los neumáticos de un turismo debe tener una profundidad mínima de…",
+    "options": [
+      "0,8 mm",
+      "1,6 mm",
+      "3 mm"
+    ],
+    "correct": 1,
+    "explanation": "Por debajo de 1,6 mm de dibujo el neumático pierde agarre, sobre todo con agua."
+  },
+  {
+    "id": "tyre_pressure_cold",
+    "text": "La presión de los neumáticos se comprueba…",
+    "options": [
+      "En frío, con la presión que indica el fabricante",
+      "En caliente, después de un viaje largo",
+      "Solo dos veces al año, antes de la ITV"
+    ],
+    "correct": 0,
+    "explanation": "La presión se mide en frío porque con el calor sube y la lectura no sería fiable."
+  },
+  {
+    "id": "level_crossing_crossing",
+    "text": "Antes de cruzar un paso a nivel…",
+    "options": [
+      "Acelero para pasar cuanto antes",
+      "Compruebo que no viene el tren y que puedo despejar las vías sin detenerme encima",
+      "Me detengo sobre las vías para mirar a ambos lados"
+    ],
+    "correct": 1,
+    "explanation": "Hay que asegurarse de que no se acerca el tren y de que hay sitio para despejar la vía."
+  },
+  {
+    "id": "parking_on_crosswalk",
+    "text": "¿Está permitido aparcar sobre un paso de peatones o en una parada de autobús?",
+    "options": [
+      "Sí, si no hay otra plaza libre",
+      "Sí, durante menos de cinco minutos",
+      "No, está prohibido"
+    ],
+    "correct": 2,
+    "explanation": "Aparcar sobre un paso de peatones o en una parada de autobús está prohibido porque crea peligro y bloquea el servicio."
+  }
+]
