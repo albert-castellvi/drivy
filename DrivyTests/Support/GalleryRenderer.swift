@@ -41,11 +41,13 @@ private func renderGallerySheet<V: View>(
     sheet: V
 ) {
     let appearance = galleryAppearanceName(scheme)
+    // The scheme goes last so the page background resolves in it too; a
+    // modifier applied after `.environment` sits outside its scope.
     let page = sheet
-        .environment(\.colorScheme, scheme)
-        .preferredColorScheme(scheme)
         .frame(width: width, height: height)
         .background(Color.drivyPaper)
+        .environment(\.colorScheme, scheme)
+        .preferredColorScheme(scheme)
 
     let renderer = ImageRenderer(content: page)
     renderer.scale = 3
