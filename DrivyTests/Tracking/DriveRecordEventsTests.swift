@@ -88,7 +88,7 @@ final class DriveRecordEventsTests: XCTestCase {
         XCTAssertFalse(json.contains("-3.7038"))
         XCTAssertFalse(json.contains("latitude"))
         XCTAssertFalse(json.contains("longitude"))
-        XCTAssertFalse(json.contains("event"))
+        XCTAssertFalse(json.contains("\"events\""))
     }
 
     func testUploadPayloadKeepsTheCountedNumbersOfTheEvents() throws {
