@@ -4,7 +4,7 @@ import Foundation
 /// migration's, because PostgREST matches them verbatim.
 struct DailyScoreRecord: Decodable, Equatable {
 
-    /// `yyyy-MM-dd`, the user's local day.
+    /// `yyyy-MM-dd`, the Europe/Madrid day the server also uses (`Calendar.madrid`).
     let day: String
 
     let score: Int

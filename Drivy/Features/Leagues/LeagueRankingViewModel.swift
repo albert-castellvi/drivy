@@ -24,13 +24,16 @@ final class LeagueRankingViewModel: ObservableObject {
     let leagueID: String
 
     private let repository: LeaguesDataLoading
+    /// Monday of the week being ranked. `Calendar.madrid` by default, so this
+    /// private league asks for the same week as the public one and as
+    /// `madrid_week_start()` (B1 of the QA report).
     private let calendar: Calendar
     private let now: () -> Date
 
     init(
         leagueID: String,
         repository: LeaguesDataLoading = SupabaseLeaguesRepository(),
-        calendar: Calendar = .current,
+        calendar: Calendar = .madrid,
         now: @escaping () -> Date = Date.init
     ) {
         self.leagueID = leagueID

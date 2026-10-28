@@ -29,7 +29,7 @@ final class ShareCardViewModel: ObservableObject {
         todayDataLoader: TodayDataLoading = SupabaseTodayRepository(),
         progressLoader: ProgressDataLoading = SupabaseProgressRepository(),
         leaguesRepository: LeaguesDataLoading = SupabaseLeaguesRepository(),
-        calendar: Calendar = .current,
+        calendar: Calendar = .madrid,
         now: @escaping () -> Date = Date.init
     ) {
         self.todayDataLoader = todayDataLoader

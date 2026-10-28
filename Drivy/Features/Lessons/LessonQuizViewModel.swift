@@ -57,7 +57,9 @@ final class LessonQuizViewModel: ObservableObject {
     /// - Parameters:
     ///   - questions: the bank; the app passes `TheoryQuestionBank.bundled`, the
     ///     tests a handful of questions.
-    ///   - calendar: day grouping, injected so tests pin Europe/Madrid.
+    ///   - calendar: day grouping. Europe/Madrid by default, because the day key
+    ///     is written to `lesson_completions`, whose CHECK only accepts Madrid
+    ///     days (B1 of the QA report); tests pin their own.
     ///   - now: clock of the day key.
     ///   - progressLoader: the shared progress layer; the lesson is never written
     ///     anywhere else.
@@ -65,7 +67,7 @@ final class LessonQuizViewModel: ObservableObject {
     ///     permission (S7); tests inject a counter.
     init(
         questions: [TheoryQuestion] = TheoryQuestionBank.bundled,
-        calendar: Calendar = .current,
+        calendar: Calendar = .madrid,
         now: @escaping () -> Date = Date.init,
         progressLoader: ProgressDataLoading = SupabaseProgressRepository(),
         requestNotificationPermission: (@MainActor () -> Void)? = nil

@@ -32,6 +32,36 @@ enum ReminderSchedule {
     }
 }
 
+/// Identifiers of the local notifications of the loop (S7).
+enum NotificationIdentifier {
+
+    static let reminder = "drivy.streak.reminder"
+    static let leagueResults = "drivy.league.results"
+}
+
+/// Which notifications may be pending (S7).
+///
+/// Pure on purpose: "nunca durante un trayecto" is a decision over two booleans,
+/// so it is tested without the notification centre or a network. Leaving the
+/// repeating league notification out of the guard that the reminder already has
+/// is exactly how a user driving at 09:00 on a Monday got "Resultados de tu liga"
+/// mid-drive (B2 of the QA report).
+enum NotificationPolicy {
+
+    /// Everything a drive start withdraws: no notification may buzz on the road.
+    static let suppressedWhileDriving = [
+        NotificationIdentifier.reminder,
+        NotificationIdentifier.leagueResults
+    ]
+
+    /// The league results notification repeats every Monday and outlives the
+    /// drive, so it needs the same guard: the drive-end refresh, where `isDriving`
+    /// is already false, schedules it again.
+    static func schedulesLeagueResults(isDriving: Bool, isInPublicLeagues: Bool) -> Bool {
+        isInPublicLeagues && !isDriving
+    }
+}
+
 /// Local notifications of the Duolingo loop (S7): the streak reminder and the
 /// Monday league results. No push server: everything is scheduled on device and
 /// rescheduled whenever the app comes to the foreground, a drive ends or a
@@ -39,15 +69,14 @@ enum ReminderSchedule {
 @MainActor
 enum DriveNotifications {
 
-    static let reminderID = "drivy.streak.reminder"
-    static let leagueResultsID = "drivy.league.results"
-
     private static var isDriving = false
 
-    /// A drive started: the reminder must not fire on the road.
+    /// A drive started: every pending notification of the day is withdrawn, so
+    /// nothing can buzz on the road (S7).
     static func driveDidStart() {
         isDriving = true
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [reminderID])
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: NotificationPolicy.suppressedWhileDriving)
     }
 
     static func driveDidEnd() {
@@ -58,6 +87,10 @@ enum DriveNotifications {
     /// Reschedules both notifications from the current progress. Silently does
     /// nothing without permission or without a session: a reminder is never worth
     /// an error on screen.
+    ///
+    /// - Parameter calendar: formats the local fire time of the reminder, so it
+    ///   stays the device calendar. It is not a server key: the day the reminder
+    ///   reasons about is Madrid (`isTodayCounted`).
     static func refresh(now: Date = Date(), calendar: Calendar = .current) async {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
@@ -65,8 +98,8 @@ enum DriveNotifications {
             return
         }
 
-        center.removePendingNotificationRequests(withIdentifiers: [reminderID])
-        let counted = (try? await isTodayCounted(now: now, calendar: calendar)) ?? false
+        center.removePendingNotificationRequests(withIdentifiers: [NotificationIdentifier.reminder])
+        let counted = (try? await isTodayCounted(now: now)) ?? false
         if let fireDate = ReminderSchedule.nextFireDate(
             now: now,
             todayCounted: counted,
@@ -79,14 +112,22 @@ enum DriveNotifications {
             content.sound = .default
             let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
             try? await center.add(UNNotificationRequest(
-                identifier: reminderID,
+                identifier: NotificationIdentifier.reminder,
                 content: content,
                 trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
             ))
         }
 
-        center.removePendingNotificationRequests(withIdentifiers: [leagueResultsID])
-        if (try? await isInPublicLeagues()) == true {
+        // S7: the league results are withdrawn here too, and the drive-end refresh
+        // brings them back. While a drive is in progress this leaves them
+        // unscheduled instead of re-adding the repeating Monday trigger (B2 of
+        // the QA report).
+        center.removePendingNotificationRequests(withIdentifiers: [NotificationIdentifier.leagueResults])
+        var isOptedIn = false
+        if !isDriving {
+            isOptedIn = (try? await isInPublicLeagues()) == true
+        }
+        if NotificationPolicy.schedulesLeagueResults(isDriving: isDriving, isInPublicLeagues: isOptedIn) {
             let content = UNMutableNotificationContent()
             content.title = "Resultados de tu liga"
             content.body = "Mira si has subido de división esta semana."
@@ -94,7 +135,7 @@ enum DriveNotifications {
             monday.weekday = 2
             monday.hour = 9
             try? await center.add(UNNotificationRequest(
-                identifier: leagueResultsID,
+                identifier: NotificationIdentifier.leagueResults,
                 content: content,
                 trigger: UNCalendarNotificationTrigger(dateMatching: monday, repeats: true)
             ))
@@ -103,8 +144,14 @@ enum DriveNotifications {
 
     /// Same rule as the streak (S1): a lesson today, or today's drives with a
     /// clean daily score.
-    private static func isTodayCounted(now: Date, calendar: Calendar) async throws -> Bool {
+    ///
+    /// Madrid, not the device zone: both the day key and the day boundary are
+    /// compared with rows whose day the server derives as `madrid_today()`
+    /// (B1 of the QA report). The reminder's own fire time keeps the device
+    /// calendar, which comes in as `refresh`'s parameter.
+    private static func isTodayCounted(now: Date) async throws -> Bool {
         let progress = SupabaseProgressRepository()
+        let calendar = Calendar.madrid
         let today = DriveDay.key(for: now, calendar: calendar)
         let lessonDays = try await progress.lessonDays(from: today, to: today)
         if !lessonDays.isEmpty {

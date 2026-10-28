@@ -26,7 +26,7 @@ final class HabitPathViewModel: ObservableObject {
 
     init(
         progressLoader: ProgressDataLoading = SupabaseProgressRepository(),
-        calendar: Calendar = .current,
+        calendar: Calendar = .madrid,
         now: @escaping () -> Date = Date.init
     ) {
         self.progressLoader = progressLoader

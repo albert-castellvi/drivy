@@ -11,12 +11,10 @@ enum PublicLeagueWeek {
     static let timeZoneIdentifier = "Europe/Madrid"
 
     /// Madrid calendar used by the client so its Monday matches the server's.
-    static var madridCalendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: timeZoneIdentifier) ?? .gmt
-        calendar.locale = Locale(identifier: "en_US_POSIX")
-        return calendar
-    }
+    ///
+    /// It is the shared `Calendar.madrid`, exposed under the name the league
+    /// code reads like the migration it mirrors: one definition, not two.
+    static var madridCalendar: Calendar { Calendar.madrid }
 
     /// `yyyy-MM-dd` of the Madrid Monday of `now`, the `p_week_start` shape.
     static func weekStartKey(for now: Date, calendar: Calendar = madridCalendar) -> String {

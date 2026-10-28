@@ -87,8 +87,9 @@ enum TheoryLessonPlanner {
     }
 
     /// `yyyy-MM-dd` of the day before `dayKey`, in the injected calendar (Europe/
-    /// Madrid in the app). `nil` when `dayKey` is not a day.
-    static func previousDayKey(before dayKey: String, calendar: Calendar = .current) -> String? {
+    /// Madrid by default, like the day the lesson is written for). `nil` when
+    /// `dayKey` is not a day.
+    static func previousDayKey(before dayKey: String, calendar: Calendar = .madrid) -> String? {
         guard
             let date = DayKey.date(from: dayKey, calendar: calendar),
             let previous = calendar.date(byAdding: .day, value: -1, to: date)

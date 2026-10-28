@@ -7,7 +7,8 @@ struct HistoryDay: Equatable, Identifiable {
     /// `yyyy-MM-dd` day key of the row (S6).
     let dayKey: String
 
-    /// Local start of that day, the value the gating rule takes.
+    /// Madrid start of that day, the value the gating rule takes: the key is a
+    /// server day, whose zone the server pins to Europe/Madrid.
     let date: Date
 
     let score: Int
@@ -23,7 +24,8 @@ struct HistoryDay: Equatable, Identifiable {
 /// S4, S6), read once so both show exactly the same numbers.
 struct TodaySnapshot: Equatable {
 
-    /// `yyyy-MM-dd` of the local day the snapshot describes.
+    /// `yyyy-MM-dd` of the Europe/Madrid day the snapshot describes, the zone
+    /// every server day is written and read in.
     let dayKey: String
 
     /// Today's Driver Score; `nil` when there is no drive today.
@@ -102,12 +104,16 @@ struct TodaySnapshotLoader {
 
     let progressLoader: ProgressDataLoading
 
+    /// Day and week grouping of everything this loader builds: day keys, day
+    /// boundaries and the Monday of the XP call. Europe/Madrid by default, since
+    /// every one of those values is compared with a server day (B1 of the QA
+    /// report).
     let calendar: Calendar
 
     init(
         dataLoader: TodayDataLoading,
         progressLoader: ProgressDataLoading = SupabaseProgressRepository(),
-        calendar: Calendar = .current
+        calendar: Calendar = .madrid
     ) {
         self.dataLoader = dataLoader
         self.progressLoader = progressLoader

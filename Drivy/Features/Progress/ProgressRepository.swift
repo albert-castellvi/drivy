@@ -63,7 +63,8 @@ struct StreakRepairRecord: Decodable, Equatable {
 /// and Supabase, so every feature of `odd/tasks/duolingo-loop.md` reads and
 /// writes progress through one place and is tested without a network.
 ///
-/// Day arguments are `yyyy-MM-dd` keys of the local calendar (`DriveDay.key`).
+/// Day arguments are `yyyy-MM-dd` keys of the Europe/Madrid calendar
+/// (`DriveDay.key` with `Calendar.madrid`), the same days the server checks.
 /// Writes are idempotent: recording the same lesson, quest, level or repair twice
 /// is a no-op, so a retry or a double tap never fails.
 protocol ProgressDataLoading {

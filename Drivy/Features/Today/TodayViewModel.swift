@@ -29,7 +29,7 @@ final class TodayViewModel: ObservableObject {
     init(
         dataLoader: TodayDataLoading = SupabaseTodayRepository(),
         progressLoader: ProgressDataLoading = SupabaseProgressRepository(),
-        calendar: Calendar = .current,
+        calendar: Calendar = .madrid,
         now: @escaping () -> Date = Date.init
     ) {
         self.snapshotLoader = TodaySnapshotLoader(

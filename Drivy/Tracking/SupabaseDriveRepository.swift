@@ -26,9 +26,19 @@ struct SupabaseDriveRepository: DriveUploading {
         // the day, so it is recomputed from the rows the server now holds. That
         // keeps devices and reinstalls consistent instead of trusting a local
         // counter.
-        let day = DriveDay.key(for: record.startedAt)
-        let startedAfter = DriveISO8601.string(from: DriveDay.start(of: record.startedAt))
-        let startedBefore = DriveISO8601.string(from: DriveDay.end(of: record.startedAt))
+        //
+        // Madrid, not the device zone: `xp_ledger` files the same drive under
+        // `(started_at at time zone 'Europe/Madrid')::date`, so a device an hour
+        // off would count the drive for the streak on one day and for XP on the
+        // next (B1 of the QA report).
+        let dayCalendar = Calendar.madrid
+        let day = DriveDay.key(for: record.startedAt, calendar: dayCalendar)
+        let startedAfter = DriveISO8601.string(
+            from: DriveDay.start(of: record.startedAt, calendar: dayCalendar)
+        )
+        let startedBefore = DriveISO8601.string(
+            from: DriveDay.end(of: record.startedAt, calendar: dayCalendar)
+        )
 
         let rows: [DriveScoreRow] = try await client
             .from("drives")

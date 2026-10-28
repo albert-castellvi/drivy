@@ -18,12 +18,16 @@ enum DriveISO8601 {
     }
 }
 
-/// Day grouping for `daily_scores` (S6). The day is the user's local day, which
-/// is why the calendar is injectable: tests pin it to UTC.
+/// Day grouping for `daily_scores` (S6).
+///
+/// The day is the Europe/Madrid day, not the device day: the server derives the
+/// same drive's day in Madrid (`madrid_today()`, the `xp_ledger` day) and rejects
+/// a lesson or quest filed for any other day (B1 of the QA report). The calendar
+/// stays injectable so tests can pin it to UTC.
 enum DriveDay {
 
     /// `yyyy-MM-dd`, the format of the `date` column.
-    static func key(for date: Date, calendar: Calendar = .current) -> String {
+    static func key(for date: Date, calendar: Calendar = .madrid) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = calendar
@@ -32,12 +36,12 @@ enum DriveDay {
         return formatter.string(from: date)
     }
 
-    static func start(of date: Date, calendar: Calendar = .current) -> Date {
+    static func start(of date: Date, calendar: Calendar = .madrid) -> Date {
         calendar.startOfDay(for: date)
     }
 
     /// Exclusive upper bound of the day, used as `started_at < end(of:)`.
-    static func end(of date: Date, calendar: Calendar = .current) -> Date {
+    static func end(of date: Date, calendar: Calendar = .madrid) -> Date {
         calendar.date(byAdding: .day, value: 1, to: start(of: date, calendar: calendar)) ?? date
     }
 }
