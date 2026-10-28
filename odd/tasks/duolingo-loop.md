@@ -116,21 +116,22 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
   mismo `infinite recursion` que producción); GREEN: 6/6 con 0002.
 - **T1b** (S1-S8) ✅ DONE — Capa de datos compartida `ProgressDataLoading` +
   fake. Commit `507e25c`. Route: inline (estado compartido de todos los writers).
-- **T2** 🔶 escrito, pendiente de CI (S1, S4, S8) — Racha v2 + hielos + reparación Premium + XP en Hoy.
+- **T2** ✅ DONE (S1, S4, S8) — Racha v2 + hielos + reparación Premium + XP en Hoy.
   Route: delegado, writer A (con T6 y la share card de T9).
-- **T3** (S2) 🔶 escrito, pendiente de CI — Test de teoría + banco de
+- **T3** (S2) ✅ DONE — Test de teoría + banco de
   preguntas. Route: delegado, writer B1 (B falló por límite de salida, L11).
-- **T4** 🔶 escrito, pendiente de CI (S2) — Resumen post-trayecto con eventos en el mapa. Route:
+- **T4** ✅ DONE (S2) — Resumen post-trayecto con eventos en el mapa. Route:
   delegado, writer C.
-- **T5** (S3) 🔶 escrito, pendiente de CI — Pestaña Camino y unidades.
+- **T5** (S3) ✅ DONE — Pestaña Camino y unidades.
   Route: delegado, writer B2.
-- **T6** 🔶 escrito, pendiente de CI (S6) — Misiones diarias. Route: delegado, writer A.
-- **T7** 🔶 escrito, pendiente de CI (S5) — Ligas públicas en iOS + ranking privado por XP. Route:
+- **T6** ✅ DONE (S6) — Misiones diarias. Route: delegado, writer A.
+- **T7** ✅ DONE (S5) — Ligas públicas en iOS + ranking privado por XP. Route:
   delegado, writer D.
-- **T8** 🔶 escrito, pendiente de CI (S7) — Notificaciones locales. Route: inline (parent, al integrar:
+- **T8** ✅ DONE (S7) — Notificaciones locales. Route: inline (parent, al integrar:
   toca DriveRecorder, la app y los puntos de enganche de B y C).
-- **T9** (S9) ⏳ — Share card (writer A) y documentación (parent).
-- **T10** — Verificador independiente (items 1, 2 y 3 de alto riesgo).
+- **T9** (S9) ✅ DONE — Share card (writer A) y documentación (parent: este documento).
+- **T10** ✅ DONE — Verificador independiente de T1 (L10) + QA del Swift (L13) y
+  recomprobación de B1-B5 (L14).
 
 ## Log
 
@@ -219,3 +220,12 @@ Sustituye a S6 (racha) y S7 (ranking por km) de `odd/tasks/drivy-mvp.md`.
   lección promete sumar el día cuando ese día ya hubo conducción sucia).
   Corrección: agentes `fix-tz` (B1, B2) y `fix-ui` (B3-B5) en paralelo con
   superficies disjuntas.
+- **L14** (2026-10-28) Correcciones de QA: `b17a7b4` (B1, B2) y `2b51e27` (B3-B5;
+  el parent corrigió además el texto de la lección en Camino). Recomprobación
+  limitada a B1-B5 (agente `recheck`): las 5 FIXED. CI del PR `40663169594` en
+  verde. Merge del PR #9 en `main` (`c8ec2a7`, rama borrada). Build firmada
+  `40664160379`: 598 tests, 0 fallos; build 31 subida a TestFlight (Delivery UUID
+  `559323d6-e849-42f8-b094-74d63c560829`). Pendiente humano: revisar las 60
+  preguntas (sobre todo `alcohol_rate_*`) y probar la build 31 en el dispositivo.
+  Avisos asumidos: A5 (tope de 30 sin probar con concurrencia real), A7 (ledger
+  sin materializar) y el desfase de la migración remota `drivy_function_hardening`.
