@@ -6,9 +6,6 @@ struct SignInView: View {
 
     @EnvironmentObject private var auth: AuthViewModel
 
-    /// Size of the brand icon, scaled with Dynamic Type instead of frozen at 56 pt.
-    @ScaledMetric(relativeTo: .title) private var brandIconSize: CGFloat = 56
-
     /// Failure copy produced by the view model, if the last attempt failed.
     private var failureMessage: String? {
         if case .failed(let message) = auth.state {
@@ -21,22 +18,16 @@ struct SignInView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            VStack(spacing: 12) {
-                Image(systemName: "car.fill")
-                    .font(.system(size: brandIconSize, weight: .semibold))
-                    // Decorative: the app name right below is the real heading.
-                    .accessibilityHidden(true)
+            // The road and the wordmark: the same identity the launch screen
+            // shows, so the app looks like itself from the first second (S5).
+            RoadIdentityMark()
 
-                Text(DrivyConfig.appDisplayName)
-                    .font(.largeTitle.bold())
-
-                Text("Convierte cada trayecto en una partida. Tu Driver Score, tu racha y tus ligas, en un solo sitio.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 32)
-            }
+            Text("Convierte cada trayecto en una partida. Tu Driver Score, tu racha y tus ligas, en un solo sitio.")
+                .font(.drivyBody)
+                .foregroundStyle(Color.drivyInkMuted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 32)
 
             Spacer()
 
@@ -48,21 +39,23 @@ struct SignInView: View {
 
                 if let failureMessage = failureMessage {
                     Text(failureMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyAlertText)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Text("Al continuar aceptas que tratemos los datos de tus trayectos para calcular tu Driver Score. No vendemos tus datos.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.drivyPaper)
     }
 }
 
