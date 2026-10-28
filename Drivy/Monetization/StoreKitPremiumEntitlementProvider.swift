@@ -46,7 +46,9 @@ struct StoreKitPremiumEntitlementProvider: PremiumEntitlementProviding {
 
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else { continue }
-            entitlements.append(PremiumEntitlement(transaction: transaction))
+            entitlements.append(
+                PremiumEntitlement(transaction: transaction, jws: result.jwsRepresentation)
+            )
         }
 
         return entitlements
@@ -125,6 +127,21 @@ struct StoreKitPremiumEntitlementProvider: PremiumEntitlementProviding {
         }
     }
 
+    // MARK: - Verified current JWS
+
+    /// JWS of the verified current entitlement that grants premium (S5.3).
+    ///
+    /// `currentEntitlements` already filters expired and revoked transactions,
+    /// and the selection re-checks the premium product and validity, so an
+    /// expired, revoked or foreign-product transaction is never posted to
+    /// `verify-premium`.
+    func verifiedPremiumJWS() async -> String? {
+        await PremiumEntitlement.verifiedCurrentJWS(
+            in: activeEntitlements(),
+            at: Date()
+        )
+    }
+
     // MARK: - Internals
 
     private func premiumProduct() async -> Product? {
@@ -141,12 +158,14 @@ struct StoreKitPremiumEntitlementProvider: PremiumEntitlementProviding {
 extension PremiumEntitlement {
 
     /// Maps a *verified* StoreKit transaction. This is the only place where a
-    /// StoreKit type crosses into the freemium domain.
-    init(transaction: Transaction) {
+    /// StoreKit type crosses into the freemium domain. The signed JWS lives on
+    /// the `VerificationResult`, not on the `Transaction`, so the caller passes it.
+    init(transaction: Transaction, jws: String) {
         self.init(
             productID: transaction.productID,
             expirationDate: transaction.expirationDate,
-            revocationDate: transaction.revocationDate
+            revocationDate: transaction.revocationDate,
+            jws: jws
         )
     }
 }

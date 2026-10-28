@@ -20,11 +20,16 @@ final class FakePremiumEntitlementProvider: PremiumEntitlementProviding {
     var purchaseResult: Result<[PremiumEntitlement], Error> = .success([])
     var restoreResult: Result<[PremiumEntitlement], Error> = .success([])
 
+    /// JWS returned by `verifiedPremiumJWS()`; `nil` simulates a session
+    /// without a current premium entitlement.
+    var verifiedJWS: String?
+
     private(set) var activeEntitlementsCallCount = 0
     private(set) var displayPriceCallCount = 0
     private(set) var purchaseCallCount = 0
     private(set) var restoreCallCount = 0
     private(set) var entitlementUpdatesCallCount = 0
+    private(set) var verifiedJWSCallCount = 0
 
     /// When `true`, `purchase()` suspends until `resumePurchase()` is called, so
     /// tests can assert what happens while the StoreKit sheet is open.
@@ -67,6 +72,11 @@ final class FakePremiumEntitlementProvider: PremiumEntitlementProviding {
         return AsyncStream { continuation in
             updateContinuation = continuation
         }
+    }
+
+    func verifiedPremiumJWS() async -> String? {
+        verifiedJWSCallCount += 1
+        return verifiedJWS
     }
 
     /// Emits a `Transaction.updates` event to whoever is listening.

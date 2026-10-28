@@ -23,6 +23,11 @@ enum FreemiumState: Equatable {
 /// SwiftUI view observing the service re-renders whenever the plan or the
 /// gating rules change (refresh, purchase, restore, `Transaction.updates`).
 ///
+/// Every plan read that ends in premium also schedules `PremiumSync` (S5.3):
+/// the JWS of the verified current entitlement is posted to `verify-premium`
+/// best effort, off the main flow, at launch after sign-in and on every
+/// `Transaction.updates` event the listener already observes.
+///
 /// ## Hook points (parent wiring, out of T5 scope)
 /// - Today / history: keep a day only when
 ///   `service.access?.canViewHistory(date: day) == true`, otherwise show
@@ -49,22 +54,30 @@ final class FreemiumService: ObservableObject {
     private var anchorDate: Date
     private var updateTask: Task<Void, Never>?
 
+    /// Poster of the premium JWS to `verify-premium` (S5.3); a spy in tests.
+    /// `nil` disables the sync entirely.
+    private let premiumSync: PremiumSyncing?
+
     /// - Parameters:
     ///   - anchorDate: profile creation date, or the first drive date when the
     ///     profile is older. It starts the 7-day full-history window (S9).
     ///   - store: StoreKit boundary; a fake in tests.
     ///   - calendar: day grouping, injectable so tests pin it to UTC.
     ///   - now: clock, injectable so the window is asserted deterministically.
+    ///   - premiumSync: `verify-premium` boundary (S5.3). The default is the
+    ///     real best-effort sync; tests inject a spy or `nil`.
     init(
         anchorDate: Date,
         store: PremiumEntitlementProviding = StoreKitPremiumEntitlementProvider(),
         calendar: Calendar = .current,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        premiumSync: PremiumSyncing? = PremiumSync()
     ) {
         self.anchorDate = anchorDate
         self.store = store
         self.calendar = calendar
         self.now = now
+        self.premiumSync = premiumSync
     }
 
     /// Plan in force, or `nil` while it is still unknown/loading.
@@ -158,6 +171,25 @@ final class FreemiumService: ObservableObject {
             : .free
         state = (plan == .premium) ? .premium : .free
         access = makeAccess(plan: plan)
+
+        // The launch read, a `Transaction.updates` event, a purchase and a
+        // restore all end here: one hook covers every moment the server may
+        // not have seen the current transaction yet (S5.3).
+        guard plan == .premium else { return }
+        schedulePremiumSync()
+    }
+
+    /// Posts the JWS of the verified current entitlement, best effort and off
+    /// the state machine: a slow or failing network call must never delay the
+    /// plan being applied (S5.3). `PremiumSync` dedupes per session.
+    private func schedulePremiumSync() {
+        guard let premiumSync else { return }
+
+        let store = self.store
+        Task {
+            guard let jws = await store.verifiedPremiumJWS() else { return }
+            await premiumSync.post(jws: jws)
+        }
     }
 
     private func makeAccess(plan: FreemiumPlan) -> FreemiumAccess {
