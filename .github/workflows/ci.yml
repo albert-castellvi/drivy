@@ -490,8 +490,9 @@ jobs:
           echo "Installing sentry-cli $SENTRY_CLI_VERSION from $url"
           # --fail: a 404 must not be written to disk as if it were the binary.
           # A download outage only costs symbolication, so it skips the step like
-          # a missing token does; a checksum mismatch below is a security failure
-          # and stops the job.
+          # a missing token does. A checksum mismatch below fails this step and
+          # the binary never runs; continue-on-error keeps the TestFlight upload
+          # going and the run shows the failure.
           if ! curl -sSL --fail -o "$cli" "$url"; then
             echo "::warning::sentry-cli download failed ($url); skipping dSYM upload"
             exit 0

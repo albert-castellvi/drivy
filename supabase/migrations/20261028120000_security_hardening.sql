@@ -37,6 +37,12 @@ revoke execute on function public.handle_new_user() from public, anon, authentic
 -- pseudonym so a league never shows a column of identical names.
 update public.profiles set display_name = public.pseudonym() where display_name = 'Driver';
 
+-- The old trigger copied the Apple name with no limit: any name the new 1-30
+-- rule would reject becomes a pseudonym first, or adding the constraint aborts.
+update public.profiles
+set display_name = public.pseudonym()
+where char_length(btrim(display_name)) not between 1 and 30;
+
 alter table public.profiles
   add constraint profiles_display_name_length
   check (char_length(btrim(display_name)) between 1 and 30);
@@ -131,12 +137,16 @@ declare
   v_bytes    bytea;
   v_code     text;
   v_league   public.leagues;
+  v_attempt  integer;
 begin
   if v_user is null then
     raise exception 'not_authenticated';
   end if;
 
-  loop
+  for v_attempt in 1..5 loop
+    if v_attempt = 5 then
+      raise exception 'invite_code_unavailable';
+    end if;
     -- 32 symbols and 256 byte values: byte % 32 has no bias.
     v_bytes := gen_random_bytes(8);
     v_code := '';
@@ -164,6 +174,10 @@ revoke execute on function public.create_league(text) from public, anon;
 grant execute on function public.create_league(text) to authenticated;
 
 drop policy "leagues_insert_owner" on public.leagues;
+
+-- The owner may rename the league, never rewrite its server-drawn code.
+revoke update on public.leagues from authenticated;
+grant update (name) on public.leagues to authenticated;
 drop policy "league_members_insert_owner_self" on public.league_members;
 
 -- ---------------------------------------------------------------------------
@@ -198,9 +212,22 @@ begin
     raise exception 'not_authenticated';
   end if;
 
+  -- Row lock: concurrent joins of one league are counted one at a time, so the
+  -- 25-member cap holds.
+  select * into v_league from public.leagues where invite_code = upper(btrim(p_code)) for update;
+
+  -- A member re-opening their own invite never spends the attempt budget.
+  if found and exists (
+    select 1 from public.league_members where league_id = v_league.id and user_id = v_user
+  ) then
+    return v_league.id;
+  end if;
+
   delete from public.league_join_failures
   where user_id = v_user and attempted_at < now() - interval '1 day';
 
+  -- ponytail: count without a lock, so a burst of parallel calls can spend a
+  -- few attempts over 10; a per-user advisory lock closes it if it matters.
   if (
     select count(*) from public.league_join_failures
     where user_id = v_user and attempted_at > now() - interval '1 hour'
@@ -208,21 +235,11 @@ begin
     raise exception 'too_many_attempts';
   end if;
 
-  -- Row lock: concurrent joins of one league are counted one at a time, so the
-  -- 25-member cap holds.
-  select * into v_league from public.leagues where invite_code = upper(btrim(p_code)) for update;
-
-  if found and exists (
-    select 1 from public.league_members where league_id = v_league.id and user_id = v_user
-  ) then
-    return v_league.id;  -- already a member
-  end if;
-
-  if found then
+  if v_league.id is not null then
     select count(*) into v_members from public.league_members where league_id = v_league.id;
   end if;
 
-  if not found or v_members >= 25 then
+  if v_league.id is null or v_members >= 25 then
     insert into public.league_join_failures (user_id) values (v_user);
     return null;
   end if;
@@ -249,10 +266,12 @@ revoke execute on function public.madrid_today() from public, anon;
 revoke execute on function public.madrid_week_start(timestamptz) from public, anon;
 revoke execute on function public.set_updated_at() from public, anon, authenticated;
 revoke execute on function public.pseudonym() from public, anon, authenticated;
-grant execute on function public.madrid_today() to authenticated;
-grant execute on function public.madrid_week_start(timestamptz) to authenticated;
+grant execute on function public.madrid_today() to authenticated, service_role;
+grant execute on function public.madrid_week_start(timestamptz) to authenticated, service_role;
 
--- Tables and functions created by later migrations start without anon access.
+-- Tables created by later migrations start without anon access. Functions keep
+-- PostgreSQL's built-in PUBLIC execute (a per-schema default cannot remove it
+-- and a global one would reach the other app sharing this project), so every
+-- new function must revoke it explicitly, as every RPC here does.
 alter default privileges in schema public revoke all on tables from anon;
 alter default privileges in schema public revoke all on sequences from anon;
-alter default privileges in schema public revoke execute on functions from anon, public;

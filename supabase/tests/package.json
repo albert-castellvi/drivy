@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Runs the SQL migrations on PGlite (Postgres in WASM) and checks RLS, XP and leagues.",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test --test-concurrency=1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8"

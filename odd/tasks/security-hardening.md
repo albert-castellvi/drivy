@@ -49,6 +49,18 @@ Rama `fix/security-hardening`. Entrega: un PR. Tests: `supabase/tests` (PGlite) 
 - **L3** (2026-10-28) Usuario: «si, aplica todo menos lo del p12».
 - **L4** (2026-10-28) Writers en herdr (`app-privacy`, `leagues-sec`, `ci-sec`). Ajuste del
   parent en CI: si falla la descarga de sentry-cli se avisa y se salta el paso (va antes de la
-  subida a TestFlight); si el checksum no coincide, el job falla. Checksum y SHAs de actions
+  subida a TestFlight); si el checksum no coincide, el paso falla sin ejecutar el binario
+  (el `continue-on-error` del paso deja seguir la subida y el run muestra el fallo). Checksum y SHAs de actions
   comprobados contra GitHub. Producción tiene 0 ligas, así que el paso a códigos de 8
   caracteres no deja ninguna liga inaccesible.
+- **L5** (2026-10-28) Verificador independiente (`verify`, Pi): S2, S3, S7 y S8 correctos con
+  42/43 sondas; 1 bloqueador: la migración abortaba si algún perfil tenía un nombre de más de
+  30 caracteres. Corrección única: esos nombres pasan a seudónimo antes de la restricción.
+  Avisos aplicados: el propietario solo puede cambiar `name` de la liga (no el código), un
+  miembro ya dentro no gasta intentos, `create_league` se rinde tras 5 colisiones,
+  `service_role` conserva los helpers de día, se elimina el `revoke` de funciones por defecto
+  (en un esquema no tiene efecto y global afectaría a MornUp). Avisos asumidos: los miembros
+  de una liga privada siguen leyendo `league_members.user_id` (S2 habla de RPC), recuento de
+  fallos sin lock, nombres con espacios guardados sin recortar (el cliente recorta). Sondas en
+  `supabase/tests/security.test.mjs`, 43/43; tests en serie por memoria (PGlite ~3 GB por
+  fichero).
