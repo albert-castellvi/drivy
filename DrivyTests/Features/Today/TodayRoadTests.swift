@@ -387,3 +387,20 @@ final class TodayRoadTests: XCTestCase {
         )
     }
 }
+
+/// S9: the quest-completion haptic fires only for quests a reload newly shows as done.
+final class TodayRoadQuestHapticTests: XCTestCase {
+
+    func testFirstLoadOnlySeedsAndNeverFires() {
+        XCTAssertFalse(TodayRoad.completesNewQuest(known: nil, current: ["cero-movil"]))
+    }
+
+    func testReloadWithANewlyDoneQuestFires() {
+        XCTAssertTrue(TodayRoad.completesNewQuest(known: ["cero-movil"], current: ["cero-movil", "frenada-suave"]))
+    }
+
+    func testReloadWithTheSameDoneQuestsDoesNotFire() {
+        XCTAssertFalse(TodayRoad.completesNewQuest(known: ["cero-movil"], current: ["cero-movil"]))
+        XCTAssertFalse(TodayRoad.completesNewQuest(known: ["cero-movil"], current: []))
+    }
+}

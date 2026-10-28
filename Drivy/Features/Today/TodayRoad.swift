@@ -153,6 +153,14 @@ struct TodayRoad: Equatable {
         }
     }
 
+    /// S9: whether a reload shows a quest as done that the screen had not shown
+    /// as done yet. `known` is `nil` before the first load, which only seeds it,
+    /// so opening the app never buzzes for quests completed earlier.
+    static func completesNewQuest(known: Set<String>?, current: Set<String>) -> Bool {
+        guard let known else { return false }
+        return !current.subtracting(known).isEmpty
+    }
+
     var doneQuestStops: [DoneQuestStop] {
         behind.compactMap { stop in
             if case .quest(let quest) = stop { return quest }

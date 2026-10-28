@@ -377,3 +377,20 @@ private extension FakeProfileDataLoader {
         return loader
     }
 }
+
+/// S8: the tab bar (T5) rendered with the real tabs, titles and symbols.
+@MainActor
+final class TabBarGalleryTests: XCTestCase {
+
+    func testTabBarGallery() {
+        DrivyAppearance.configure()
+        renderGallery("tab-bar") {
+            TabView {
+                ForEach(DrivyTab.allCases, id: \.self) { tab in
+                    Color.drivyPaper
+                        .tabItem { Label(tab.title, systemImage: tab.symbol) }
+                }
+            }
+        }
+    }
+}

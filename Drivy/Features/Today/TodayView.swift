@@ -31,6 +31,12 @@ struct TodayView: View {
     @StateObject private var model = TodayViewModel()
     @State private var activeSheet: TodaySheet?
 
+    /// Done quests as of the last finished load; `nil` until the first one (S9).
+    @State private var knownDoneQuestIDs: Set<String>?
+
+    /// Bumped when a reload completes a new quest; drives the success haptic.
+    @State private var questCompletedPulse = 0
+
     /// "Presented once ever" flag of the paywall (S9).
     private let paywallGate = FirstDrivePaywallGate()
 
@@ -72,6 +78,16 @@ struct TodayView: View {
             .task(id: auth.signedInUser?.id) { await reload() }
             // A finished drive is written to `drives` and `daily_scores` by the
             // upload, so the day is read again as soon as the recorder has it.
+            // S9: a success haptic when a reload shows a newly completed quest.
+            .onChange(of: model.isLoading) { _, isLoading in
+                guard !isLoading else { return }
+                let ids = Set(road.doneQuestStops.map(\.id))
+                if TodayRoad.completesNewQuest(known: knownDoneQuestIDs, current: ids) {
+                    questCompletedPulse += 1
+                }
+                knownDoneQuestIDs = ids
+            }
+            .sensoryFeedback(.success, trigger: questCompletedPulse)
             .onChange(of: recorder.lastCompletedDrive) { _, drive in
                 guard let drive else { return }
                 handleCompletedDrive(drive)
@@ -371,9 +387,8 @@ struct TodayHeader: View {
         }
     }
 
-    /// One line: the streak run, the freezes left this week and the lifetime XP
-    /// (S4). The XP of this week was the old card's second figure; the road keeps
-    /// one number per idea, and the total is what the mockup shows.
+    /// One line: the streak run, the freezes left this week, the lifetime XP and
+    /// this week's XP (the figure the weekly leagues rank by).
     private var streakLine: Text {
         var line = Text(snapshot.streak.headline)
             .font(.drivyBodyStrong)
@@ -386,7 +401,7 @@ struct TodayHeader: View {
         }
 
         if let xp = snapshot.xp {
-            line = line + Text(" · \(xp.totalXP) XP")
+            line = line + Text(" · \(xp.totalXP) XP · +\(xp.weekXP) esta semana")
                 .font(.drivyFootnote)
                 .foregroundStyle(Color.drivyInkMuted)
         }
