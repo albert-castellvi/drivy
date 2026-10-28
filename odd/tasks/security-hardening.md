@@ -28,13 +28,13 @@ Rama `fix/security-hardening`. Entrega: un PR. Tests: `supabase/tests` (PGlite) 
 
 ## Tasks
 
-- **T1** (S2, S3, S7) — Migración `security_hardening` + tests. Route: inline (fija el
+- **T1** ✅ `8d3e312` (S2, S3, S7) — Migración `security_hardening` + tests. Route: inline (fija el
   contrato de T3). Risk: items 1, 2, 3.
-- **T2** (S1, S2 Ajustes, S4, S5, S6) — App: privacidad e identidad. Route: delegado, writer
+- **T2** ✅ `a662c2e` (S1, S2 Ajustes, S4, S5, S6) — App: privacidad e identidad. Route: delegado, writer
   `app-privacy`.
-- **T3** (S2 cliente, S3 cliente) — Ligas y share card con `is_me`, `create_league` y nuevos
+- **T3** ✅ `c2567c1` (S2 cliente, S3 cliente) — Ligas y share card con `is_me`, `create_league` y nuevos
   errores. Route: delegado, writer `leagues-sec`.
-- **T4** (S8) — CI y `.gitignore`. Route: delegado, writer `ci-sec`. Risk: item 5.
+- **T4** ✅ `3414aa9` (S8) — CI y `.gitignore`. Route: delegado, writer `ci-sec`. Risk: item 5.
 - **T5** — Verificador independiente de T1 y T4 + CI + aplicar la migración con
   confirmación del usuario.
 
@@ -47,3 +47,8 @@ Rama `fix/security-hardening`. Entrega: un PR. Tests: `supabase/tests` (PGlite) 
 - **L2** (2026-10-28) Revisión: sin secretos filtrados ni en el árbol ni en el historial; no
   sale ninguna coordenada del dispositivo. Hallazgos listados en S1-S8.
 - **L3** (2026-10-28) Usuario: «si, aplica todo menos lo del p12».
+- **L4** (2026-10-28) Writers en herdr (`app-privacy`, `leagues-sec`, `ci-sec`). Ajuste del
+  parent en CI: si falla la descarga de sentry-cli se avisa y se salta el paso (va antes de la
+  subida a TestFlight); si el checksum no coincide, el job falla. Checksum y SHAs de actions
+  comprobados contra GitHub. Producción tiene 0 ligas, así que el paso a códigos de 8
+  caracteres no deja ninguna liga inaccesible.
