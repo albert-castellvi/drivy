@@ -16,9 +16,9 @@ struct KmPost<Content: View>: View {
     /// post of a screen header (both from the approved mockup).
     enum Size {
 
-        static let marker = CGSize(width: 38, height: 52)
+        static var marker: CGSize { CGSize(width: 38, height: 52) }
 
-        static let score = CGSize(width: 74, height: 92)
+        static var score: CGSize { CGSize(width: 74, height: 92) }
     }
 
     /// Colour of the cap.
