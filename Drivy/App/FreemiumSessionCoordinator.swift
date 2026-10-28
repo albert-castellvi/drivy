@@ -7,11 +7,12 @@ import Foundation
 /// user signs in (anchored at the account creation date read from the auth
 /// session), read once, kept in sync with StoreKit, and dropped on sign-out so a
 /// second account on the same device never inherits the previous plan or the
-/// previous history window.
+/// previous history window. Sign-out also deletes what the leaving account left
+/// on the device (S6).
 ///
 /// Everything StoreKit-related stays behind `PremiumEntitlementProviding`, so the
 /// whole lifecycle is asserted in unit tests with a fake (`makeService` is
-/// injected too).
+/// injected too, and so is the route-cache flush).
 @MainActor
 final class FreemiumSessionCoordinator: ObservableObject {
 
@@ -26,6 +27,7 @@ final class FreemiumSessionCoordinator: ObservableObject {
     private let makeService: @MainActor (Date) -> FreemiumService
     private let defaults: UserDefaults
     private let now: () -> Date
+    private let removeCachedRoutes: () -> Void
     private var signedInUserID: String?
 
     /// - Parameters:
@@ -34,16 +36,20 @@ final class FreemiumSessionCoordinator: ObservableObject {
     ///     tests inject a fake.
     ///   - defaults: storage of the per-account first-drive anchor.
     ///   - now: clock, injectable for the anchor fallback and for tests.
+    ///   - removeCachedRoutes: drops the routes of the launch (S6). The default
+    ///     is `LocalRouteStore.shared.removeAll()`; tests count the calls.
     init(
         makeService: @escaping @MainActor (Date) -> FreemiumService = {
             FreemiumService(anchorDate: $0)
         },
         defaults: UserDefaults = .standard,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        removeCachedRoutes: @escaping () -> Void = { LocalRouteStore.shared.removeAll() }
     ) {
         self.makeService = makeService
         self.defaults = defaults
         self.now = now
+        self.removeCachedRoutes = removeCachedRoutes
     }
 
     // MARK: - Session
@@ -67,12 +73,22 @@ final class FreemiumSessionCoordinator: ObservableObject {
         service.startObservingEntitlementUpdates()
     }
 
-    /// Ends the session: the StoreKit listener is cancelled and the service (with
-    /// its plan and gating snapshot) is dropped.
+    /// Ends the session: the StoreKit listener is cancelled, the service (with its
+    /// plan and gating snapshot) is dropped, and the traces the leaving account
+    /// left on the device are deleted (S6).
+    ///
+    /// The stored anchor and the routes of the launch both describe what that user
+    /// did, and neither belongs to the next account that signs in on this device.
+    /// The anchor key is per account, so only the leaving user's is removed.
     func signOut() {
         service?.stopObservingEntitlementUpdates()
         service = nil
+
+        guard let userID = signedInUserID else { return }
         signedInUserID = nil
+
+        defaults.removeObject(forKey: Self.firstDriveAnchorKeyPrefix + userID)
+        removeCachedRoutes()
     }
 
     // MARK: - Anchor of the free window

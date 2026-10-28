@@ -181,9 +181,9 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertEqual(sut.state, .failed(message: "No hemos podido cerrar sesión. Inténtalo de nuevo."))
     }
 
-    // MARK: - Crash reporting (S4)
+    // MARK: - Crash reporting (S4, S5)
 
-    func testSignInFailureIsReportedWithTheRealError() async {
+    func testAppleFailureIsReportedAsASanitizedCode() async throws {
         let (sut, _, appleProvider, reporter) = makeSUT()
         let task = await startSignIn(sut, appleProvider)
 
@@ -191,12 +191,16 @@ final class AuthViewModelTests: XCTestCase {
         await task.value
 
         XCTAssertEqual(reporter.reportedErrors.count, 1)
-        XCTAssertEqual(reporter.reportedErrors.first as? AppleSignInError, .failed("boom"))
+        XCTAssertEqual(reporter.reportedReports, [.appleSignInFailed])
+
+        // S5: the sentence of the report is ours, not the one of the failure.
+        let reported = try XCTUnwrap(reporter.reportedErrors.first)
+        XCTAssertFalse(reported.localizedDescription.contains("boom"))
         // A failed sign-in must not claim a user.
         XCTAssertTrue(reporter.reportedUserIds.isEmpty)
     }
 
-    func testTokenExchangeFailureIsReportedWithTheRealError() async {
+    func testTokenExchangeFailureIsReportedAsASanitizedCode() async {
         let (sut, _, appleProvider, reporter) = makeSUT(
             signInOutcome: .failure(FakeAuthService.FakeError.network)
         )
@@ -206,8 +210,30 @@ final class AuthViewModelTests: XCTestCase {
         await task.value
 
         XCTAssertEqual(reporter.reportedErrors.count, 1)
-        XCTAssertEqual(reporter.reportedErrors.first as? FakeAuthService.FakeError, .network)
+        XCTAssertEqual(reporter.reportedReports, [.authSignInFailed])
+        // The `AuthError` behind the failure never reaches the reporter: its
+        // description can embed the response body (S5).
+        XCTAssertNil(reporter.reportedErrors.first as? FakeAuthService.FakeError)
         XCTAssertTrue(reporter.reportedUserIds.isEmpty)
+    }
+
+    /// A failure of the Apple sheet and a failure of the token exchange are told
+    /// apart on the dashboard, but both are reported as codes (S5).
+    func testTheTwoSignInFailuresReportDifferentCodes() async {
+        let (appleSUT, _, appleProvider, appleReporter) = makeSUT()
+        let appleTask = await startSignIn(appleSUT, appleProvider)
+        appleProvider.fail(with: AppleSignInError.failed("boom"))
+        await appleTask.value
+
+        let (tokenSUT, _, tokenProvider, tokenReporter) = makeSUT(
+            signInOutcome: .failure(FakeAuthService.FakeError.network)
+        )
+        let tokenTask = await startSignIn(tokenSUT, tokenProvider)
+        tokenProvider.complete(with: Self.credential)
+        await tokenTask.value
+
+        XCTAssertEqual(appleReporter.reportedReports, [.appleSignInFailed])
+        XCTAssertEqual(tokenReporter.reportedReports, [.authSignInFailed])
     }
 
     /// Cancelling the Apple sheet is the user's own decision, not a failure.
@@ -253,7 +279,7 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertNil(reporter.lastReportedUserId)
     }
 
-    func testSignOutFailureIsReportedWithTheRealError() async {
+    func testSignOutFailureIsReportedAsASanitizedCode() async {
         let (sut, authService, _, reporter) = makeSUT(restoredUser: Self.user)
         await sut.restoreSession()
         authService.signOutError = FakeAuthService.FakeError.network
@@ -261,7 +287,8 @@ final class AuthViewModelTests: XCTestCase {
         await sut.signOut()
 
         XCTAssertEqual(reporter.reportedErrors.count, 1)
-        XCTAssertEqual(reporter.reportedErrors.first as? FakeAuthService.FakeError, .network)
+        XCTAssertEqual(reporter.reportedReports, [.authSignOutFailed])
+        XCTAssertNil(reporter.reportedErrors.first as? FakeAuthService.FakeError)
         // The session is still there, so the reported user is not cleared.
         XCTAssertEqual(reporter.reportedUserIds, [Self.user.id])
     }

@@ -3,7 +3,7 @@ import XCTest
 
 /// Lifecycle of the freemium service (S9): created per session, anchored at the
 /// account creation date, re-anchored once at the first drive, and dropped on
-/// sign-out.
+/// sign-out, which also deletes what the leaving account left on the device (S6).
 ///
 /// StoreKit lives behind `PremiumEntitlementProviding` and the service factory is
 /// injected, so nothing here touches StoreKit or Supabase.
@@ -39,6 +39,7 @@ final class FreemiumSessionCoordinatorTests: XCTestCase {
         store = nil
         coordinator = nil
         anchorsBox = nil
+        routesBox = nil
         try super.tearDownWithError()
     }
 
@@ -48,6 +49,8 @@ final class FreemiumSessionCoordinatorTests: XCTestCase {
         let now = Self.now
         let anchors = AnchorsBox()
         self.anchorsBox = anchors
+        let routes = RoutesBox()
+        self.routesBox = routes
 
         return FreemiumSessionCoordinator(
             makeService: { anchor in
@@ -61,7 +64,8 @@ final class FreemiumSessionCoordinatorTests: XCTestCase {
                 return service
             },
             defaults: defaults,
-            now: { now }
+            now: { now },
+            removeCachedRoutes: { routes.flushCount += 1 }
         )
     }
 
@@ -72,6 +76,13 @@ final class FreemiumSessionCoordinatorTests: XCTestCase {
     }
 
     private var anchorsBox: AnchorsBox!
+
+    /// Counts the route-cache flushes the coordinator asked for (S6).
+    private final class RoutesBox {
+        var flushCount = 0
+    }
+
+    private var routesBox: RoutesBox!
 
     private func user(id: String = FreemiumSessionCoordinatorTests.userID,
                       createdAt: Date? = FreemiumSessionCoordinatorTests.accountCreatedAt) -> UserSummary {
@@ -156,6 +167,37 @@ final class FreemiumSessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(service.state, .free)
     }
 
+    /// S6: the first-drive anchor is the pseudonymous id of the account plus the
+    /// date of its first drive, and neither may outlive the session.
+    func testSignOutForgetsTheFirstDriveAnchorOfTheAccount() async {
+        await coordinator.signIn(as: user())
+        coordinator.recordCompletedDrive(startedAt: PremiumFixtures.date(anchorOffsetDays: 20))
+        let key = FreemiumSessionCoordinator.firstDriveAnchorKeyPrefix + Self.userID
+        XCTAssertNotNil(defaults.object(forKey: key))
+
+        coordinator.signOut()
+
+        XCTAssertNil(defaults.object(forKey: key))
+    }
+
+    /// S6: the routes of the launch are what the previous user drove.
+    func testSignOutDropsTheRoutesKeptInMemory() async {
+        await coordinator.signIn(as: user())
+
+        coordinator.signOut()
+
+        XCTAssertEqual(routesBox.flushCount, 1)
+    }
+
+    /// Nothing to clean when there was no session: a launch that never signed in
+    /// must not throw away the routes of the user who is still signed in.
+    func testSignOutWithoutASessionTouchesNothing() {
+        coordinator.signOut()
+
+        XCTAssertEqual(routesBox.flushCount, 0)
+        XCTAssertNil(coordinator.service)
+    }
+
     // MARK: - First drive anchor (L10)
 
     func testFirstCompletedDriveMovesTheAnchor() async throws {
@@ -188,7 +230,8 @@ final class FreemiumSessionCoordinatorTests: XCTestCase {
         let firstDrive = PremiumFixtures.date(anchorOffsetDays: 20)
         coordinator.recordCompletedDrive(startedAt: firstDrive)
 
-        coordinator.signOut()
+        // A new launch with the session restored from the Keychain: it does not go
+        // through `signOut`, which is what deletes the anchor (S6).
         let reopened = makeCoordinator()
         await reopened.signIn(as: user())
 
