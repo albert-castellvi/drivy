@@ -46,7 +46,9 @@ struct StoreKitPremiumEntitlementProvider: PremiumEntitlementProviding {
 
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else { continue }
-            entitlements.append(PremiumEntitlement(transaction: transaction))
+            entitlements.append(
+                PremiumEntitlement(transaction: transaction, jws: result.jwsRepresentation)
+            )
         }
 
         return entitlements
@@ -156,13 +158,14 @@ struct StoreKitPremiumEntitlementProvider: PremiumEntitlementProviding {
 extension PremiumEntitlement {
 
     /// Maps a *verified* StoreKit transaction. This is the only place where a
-    /// StoreKit type crosses into the freemium domain.
-    init(transaction: Transaction) {
+    /// StoreKit type crosses into the freemium domain. The signed JWS lives on
+    /// the `VerificationResult`, not on the `Transaction`, so the caller passes it.
+    init(transaction: Transaction, jws: String) {
         self.init(
             productID: transaction.productID,
             expirationDate: transaction.expirationDate,
             revocationDate: transaction.revocationDate,
-            jws: transaction.jwsRepresentation
+            jws: jws
         )
     }
 }

@@ -385,7 +385,18 @@ test('probe: quests cap at three per day and lessons pay 10', async () => {
   await asUser(db, user, `insert into public.lesson_completions (day, correct, total) values ($1, 0, 5)`, [
     today,
   ]);
-  for (const quest of ['a_one', 'b_two', 'c_three', 'd_four', 'e_five']) {
+  // Quest ids must be catalog keys (QuestCatalog.swift:44-96) and each one now
+  // needs the drive that earns it (S3.4 of server-validation): one 5 km drive
+  // with no events of any kind earns all five below. Score 40 pays no drive XP,
+  // so the total stays lesson + three quests.
+  await addDrive(db, user, { km: 5, score: 40 });
+  for (const quest of [
+    'no_events_drive',
+    'no_phone_drive',
+    'smooth_brakes',
+    'smooth_start',
+    'legal_speed',
+  ]) {
     await asUser(db, user, `insert into public.quest_completions (day, quest_id) values ($1, $2)`, [
       today,
       quest,

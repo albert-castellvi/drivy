@@ -348,6 +348,15 @@ test('probe A7: sign-up still works for an auth-service role with no execute on 
 test('probe A8: create_league never repeats a code and covers the whole alphabet', async () => {
   const db = await freshDatabase();
   const owner = await createUser(db, 'Owner');
+  // A free user may hold one league (S5.1 of server-validation), so the second
+  // create_league would raise league_limit. The owner is premium here: the loop
+  // keeps testing code generation and also proves premium lifts the cap.
+  await db.query(
+    `insert into public.premium_entitlements
+       (user_id, original_transaction_id, product_id, expires_at)
+     values ($1, 'tx-a8-owner', 'com.acrstudio.drivy.premium.monthly', now() + interval '30 days')`,
+    [owner],
+  );
   const codes = new Set();
   const symbols = new Set();
   for (let i = 0; i < 60; i += 1) {
@@ -513,12 +522,25 @@ test('probe A14: the S7 revokes did not take away a path the client uses', async
   assert.ok((await asUser(db, id, `select * from public.xp_ledger`)) !== undefined);
 
   // Insert paths whose CHECK constraints call madrid_today(): still allowed.
+  // Every write is real data the app itself sends: three 5 km drives of today
+  // (six minutes each, no events) earn the quest and the first habit level, so
+  // the rules of S3 of server-validation accept them.
   const today = (await db.query(`select public.madrid_today()::text as d`)).rows[0].d;
+  for (let i = 0; i < 3; i += 1) {
+    await asUser(
+      db,
+      id,
+      `insert into public.drives (user_id, started_at, ended_at, distance_km, duration_s, score)
+       values ($1,
+               (public.madrid_today() + time '00:05' + make_interval(mins => $2::int)) at time zone 'Europe/Madrid',
+               (public.madrid_today() + time '00:11' + make_interval(mins => $2::int)) at time zone 'Europe/Madrid',
+               5, 360, 95)`,
+      [id, i * 10],
+    );
+  }
   await asUser(db, id, `insert into public.quest_completions (day, quest_id) values ($1, 'clean_drive')`, [today]);
-  await asUser(db, id, `insert into public.habit_levels (unit, level) values ('no_phone', 1)`);
-  await asUser(db, id, `insert into public.drives (user_id, started_at, ended_at, distance_km, duration_s, score)
-                        values ($1, now() - interval '1 hour', now(), 5, 1800, 95)`, [id]);
-  assert.equal((await asUser(db, id, `select count(*)::int as n from public.drives`))[0].n, 1);
+  await asUser(db, id, `insert into public.habit_levels (unit, level) values ('smooth_braking', 1)`);
+  assert.equal((await asUser(db, id, `select count(*)::int as n from public.drives`))[0].n, 3);
 
   // A settings-style PATCH of one column still works end to end.
   const patched = await asUser(db, id, `update public.profiles set display_name = 'Ana G' where id = $1 returning display_name`, [id]);

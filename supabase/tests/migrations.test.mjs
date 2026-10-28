@@ -80,14 +80,15 @@ async function weekStart(db) {
 }
 
 // A drive that started today at noon, Madrid time.
-async function addDrive(db, userID, { km, score, daysAgo = 0 }) {
+async function addDrive(db, userID, { km, score, daysAgo = 0, connected = false }) {
   await db.query(
-    `insert into public.drives (user_id, started_at, ended_at, distance_km, duration_s, score)
+    `insert into public.drives
+       (user_id, started_at, ended_at, distance_km, duration_s, score, connected_mode)
      values ($1,
              ((now() at time zone 'Europe/Madrid')::date - $4::int + time '12:00') at time zone 'Europe/Madrid',
              ((now() at time zone 'Europe/Madrid')::date - $4::int + time '12:30') at time zone 'Europe/Madrid',
-             $2, 1800, $3)`,
-    [userID, km, score, daysAgo],
+             $2, 1800, $3, $5)`,
+    [userID, km, score, daysAgo, connected],
   );
 }
 
@@ -174,12 +175,18 @@ test('S4: XP comes from drive quality, lessons, quests and habit levels, with da
   await addDrive(db, user, { km: 5, score: 80 }); // 10
   for (let i = 0; i < 4; i += 1) await addDrive(db, user, { km: 5, score: 95 }); // best 3 of the day count
   await addDrive(db, user, { km: 5, score: 95, daysAgo: 8 }); // last week: lifetime only
+  // `connected_drive` (QuestCatalog.swift:106-110) needs a drive recorded in
+  // connected mode that day, and the server now checks it (S3.4 of
+  // server-validation). Score 50 pays no drive XP, so the totals do not move.
+  await addDrive(db, user, { km: 5, score: 50, connected: true });
 
   const today = (await db.query(`select (now() at time zone 'Europe/Madrid')::date::text as d`)).rows[0].d;
   await asUser(db, user, `insert into public.lesson_completions (day, correct, total) values ($1, 4, 5)`, [
     today,
   ]);
-  for (const quest of ['clean_drive', 'no_phone', 'lesson', 'connected']) {
+  // Quest ids are the stable catalog keys (QuestCatalog.swift:44-96), the only
+  // ids the app can send; the day's drives above earn every one of them.
+  for (const quest of ['clean_drive', 'no_phone_drive', 'lesson', 'connected_drive']) {
     await asUser(db, user, `insert into public.quest_completions (day, quest_id) values ($1, $2)`, [
       today,
       quest,
