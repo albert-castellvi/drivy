@@ -5,14 +5,18 @@ import SwiftUI
 /// Preview-friendly: the view takes its view model, so a `#Preview` or a UI test
 /// can wire it to a fake StoreKit provider instead of the live one. Screens do
 /// not build it directly: they go through `PaywallPresenter`.
+///
+/// The road system reads here too (S5): the price in the display role, the
+/// benefits as a list of blue information signs, and the purchase as the one
+/// directional sign of the screen. Copy stays exactly as `PaywallCopy` writes it
+/// (S6).
 struct PaywallView: View {
 
     @ObservedObject private var viewModel: PaywallViewModel
     private let onClose: () -> Void
 
     /// - Parameters:
-    ///   - viewModel: paywall state; `PaywallPresenter.makeViewModel()` in the
-    ///     app, `PaywallViewModel.preview()` in previews.
+    ///   - viewModel: paywall state; `PaywallViewModel.preview()` in previews.
     ///   - onClose: dismissal of the sheet ("Ahora no"). The presentation itself
     ///     belongs to the caller.
     init(viewModel: PaywallViewModel, onClose: @escaping () -> Void = {}) {
@@ -31,6 +35,7 @@ struct PaywallView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(24)
             }
+            .background(Color.drivyPaper)
             // S9/S12: the paywall never blocks the app, it is always dismissible.
             .paywallActionBar { actions }
             .navigationTitle(PaywallCopy.title)
@@ -49,22 +54,33 @@ struct PaywallView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(PaywallCopy.subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.drivyBody)
+                .foregroundStyle(Color.drivyInkMuted)
 
             Text(viewModel.priceText)
-                .font(.largeTitle.bold())
+                .font(.drivyDisplay)
+                .monospacedDigit()
+                .foregroundStyle(Color.drivyInk)
         }
     }
 
     private var benefitsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(PaywallCopy.benefitsTitle)
-                .font(.headline)
+                .font(.drivyHeadline)
+                .foregroundStyle(Color.drivyInk)
 
             ForEach(viewModel.benefits, id: \.self) { benefit in
-                Label(benefit, systemImage: "checkmark.circle.fill")
-                    .font(.body)
+                HStack(alignment: .center, spacing: 12) {
+                    // The small information sign of the system, with the mark of
+                    // what the plan includes; decorative, the line reads itself.
+                    RoadSign(kind: .info(systemName: "checkmark"), size: RoadMetrics.minSignSize)
+
+                    Text(benefit)
+                        .font(.drivyBody)
+                        .foregroundStyle(Color.drivyInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -81,9 +97,9 @@ struct PaywallView: View {
         case .restoring:
             statusLabel(PaywallCopy.restoringMessage, showsSpinner: true)
         case .purchased:
-            statusLabel(PaywallCopy.purchasedMessage, color: .green)
+            statusLabel(PaywallCopy.purchasedMessage, color: .drivyGo)
         case .failed(let message):
-            statusLabel(message, color: .red)
+            statusLabel(message, color: .drivyAlertText)
         }
     }
 
@@ -92,8 +108,8 @@ struct PaywallView: View {
         VStack(spacing: 12) {
             if viewModel.plan == .premium {
                 Text(PaywallCopy.premiumActiveMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
             } else {
                 Button {
                     Task { await viewModel.purchase() }
@@ -101,14 +117,14 @@ struct PaywallView: View {
                     Text(PaywallCopy.purchaseButtonTitle)
                         .frame(maxWidth: .infinity)
                 }
-                .glassProminentOrBorderedProminent()
+                .buttonStyle(.directionSign)
                 .disabled(viewModel.isBusy)
             }
 
             Button(PaywallCopy.restoreButtonTitle) {
                 Task { await viewModel.restore() }
             }
-            .font(.footnote)
+            .font(.drivyFootnote)
             .disabled(viewModel.isBusy)
         }
         .padding()
@@ -119,7 +135,7 @@ struct PaywallView: View {
     private func statusLabel(
         _ message: String,
         showsSpinner: Bool = false,
-        color: Color = .secondary
+        color: Color = .drivyInkMuted
     ) -> some View {
         HStack(spacing: 8) {
             if showsSpinner {
@@ -127,7 +143,7 @@ struct PaywallView: View {
             }
 
             Text(message)
-                .font(.footnote)
+                .font(.drivyFootnote)
                 .foregroundStyle(color)
                 .fixedSize(horizontal: false, vertical: true)
         }

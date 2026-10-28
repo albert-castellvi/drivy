@@ -16,10 +16,10 @@ struct LeaguesView: View {
     /// Plan and gating rules of the session (S9), owned by `RootView`.
     @EnvironmentObject private var freemium: FreemiumService
 
-    @StateObject private var model = LeaguesViewModel()
+    @StateObject private var model: LeaguesViewModel
 
     /// Public league state (S5): undecided, opted in or opted out.
-    @StateObject private var publicLeague = PublicLeagueViewModel()
+    @StateObject private var publicLeague: PublicLeagueViewModel
 
     @State private var activeSheet: ActiveSheet?
     @State private var joinCode = ""
@@ -31,6 +31,19 @@ struct LeaguesView: View {
         var id: String { rawValue }
     }
 
+    init() {
+        _model = StateObject(wrappedValue: LeaguesViewModel())
+        _publicLeague = StateObject(wrappedValue: PublicLeagueViewModel())
+    }
+
+    /// Same tab over already-built models (S8): lets the gallery show the real
+    /// screen with fixture leagues and standings instead of an empty list. The
+    /// app keeps using the no-argument initialiser.
+    init(model: LeaguesViewModel, publicLeague: PublicLeagueViewModel) {
+        _model = StateObject(wrappedValue: model)
+        _publicLeague = StateObject(wrappedValue: publicLeague)
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -40,6 +53,8 @@ struct LeaguesView: View {
                 joinSection
                 createSection
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.drivyPaper)
             .navigationTitle("Ligas")
             .refreshable { await reload() }
             .task(id: auth.signedInUser?.id) { await reload() }
@@ -80,64 +95,85 @@ struct LeaguesView: View {
     }
 
     private var leaguesSection: some View {
-        Section("Tus ligas privadas") {
-            if model.leagues.isEmpty && !model.isLoading {
-                Text("Aún no estás en ninguna liga. Crea una o únete con un código.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+        Section {
+            Group {
+                if model.leagues.isEmpty && !model.isLoading {
+                    Text("Aún no estás en ninguna liga. Crea una o únete con un código.")
+                        .font(.drivyBody)
+                        .foregroundStyle(Color.drivyInkMuted)
+                }
 
-            ForEach(model.leagues) { league in
-                NavigationLink {
-                    LeagueDetailView(league: league)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(league.name)
-                            .font(.headline)
+                ForEach(model.leagues) { league in
+                    NavigationLink {
+                        LeagueDetailView(league: league)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(league.name)
+                                .font(.drivyHeadline)
+                                .foregroundStyle(Color.drivyInk)
 
-                        Text("Código \(league.inviteCode)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            Text("Código \(league.inviteCode)")
+                                .font(.drivyKicker)
+                                .foregroundStyle(Color.drivyInkMuted)
+                        }
                     }
                 }
-            }
 
-            if let errorMessage = model.errorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+                if let errorMessage = model.errorMessage {
+                    Text(errorMessage)
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyAlertText)
+                }
             }
+            .flatRow()
+        } header: {
+            Text("Tus ligas privadas")
+                .font(.drivyHeadline)
+                .foregroundStyle(Color.drivyInk)
         }
     }
 
     private var joinSection: some View {
         Section {
-            TextField("Código o enlace de invitación", text: $joinCode)
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-                .onSubmit { Task { await join() } }
+            Group {
+                TextField("Código o enlace de invitación", text: $joinCode)
+                    .font(.drivyBody)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .onSubmit { Task { await join() } }
 
-            Button {
-                Task { await join() }
-            } label: {
-                if model.isJoining {
-                    ProgressView()
-                } else {
-                    Text("Unirme a una liga")
+                Button {
+                    Task { await join() }
+                } label: {
+                    if model.isJoining {
+                        ProgressView()
+                    } else {
+                        Text("Unirme a una liga")
+                            .font(.drivyBodyStrong)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                // Filled with the sign blue: the light dark-mode tint is for text, not fills.
+                .tint(Color.drivySignBlue)
+                .disabled(model.isJoining)
+
+                if let joinErrorMessage = model.joinErrorMessage {
+                    Text(joinErrorMessage)
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyAlertText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .disabled(model.isJoining)
-
-            if let joinErrorMessage = model.joinErrorMessage {
-                Text(joinErrorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            .flatRow()
         } header: {
             Text("Unirse")
+                .font(.drivyHeadline)
+                .foregroundStyle(Color.drivyInk)
         } footer: {
             Text("Pega el código de 8 caracteres o el enlace que te hayan enviado.")
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyInkMuted)
         }
     }
 
@@ -147,35 +183,49 @@ struct LeaguesView: View {
     private var limitSection: some View {
         if isLeagueLimitReached {
             Section {
-                Label(LeagueLimitGate.limitMessage, systemImage: "lock.fill")
-                    .font(.subheadline)
-                    .fixedSize(horizontal: false, vertical: true)
+                Group {
+                    Label(LeagueLimitGate.limitMessage, systemImage: "lock.fill")
+                        .font(.drivyBody)
+                        .foregroundStyle(Color.drivyInk)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                Button {
-                    activeSheet = .paywall
-                } label: {
-                    Label(PaywallCopy.title, systemImage: "star.fill")
+                    Button {
+                        activeSheet = .paywall
+                    } label: {
+                        Text(PaywallCopy.title)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.directionSign)
                 }
+                .flatRow()
             } header: {
                 Text("Plan Free")
+                    .font(.drivyHeadline)
+                    .foregroundStyle(Color.drivyInk)
             }
         }
     }
 
     private var createSection: some View {
         Section {
-            Button {
-                guard !isLeagueLimitReached else {
-                    activeSheet = .paywall
-                    return
+            Group {
+                Button {
+                    guard !isLeagueLimitReached else {
+                        activeSheet = .paywall
+                        return
+                    }
+                    activeSheet = .createLeague
+                } label: {
+                    Label("Crear liga privada", systemImage: "plus.circle.fill")
+                        .font(.drivyBodyStrong)
                 }
-                activeSheet = .createLeague
-            } label: {
-                Label("Crear liga privada", systemImage: "plus.circle.fill")
+                .disabled(model.isCreating)
             }
-            .disabled(model.isCreating)
+            .flatRow()
         } footer: {
             Text("Compite con hasta 25 amigos por el mayor XP de la semana. El XP se gana conduciendo bien y con lecciones, nunca por conducir más.")
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyInkMuted)
         }
     }
 
@@ -220,17 +270,22 @@ private struct CreateLeagueSheet: View {
             Form {
                 Section {
                     TextField("Nombre de la liga", text: $name)
+                        .font(.drivyBody)
                         .autocorrectionDisabled()
 
                     if let createErrorMessage = model.createErrorMessage {
                         Text(createErrorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                            .font(.drivyFootnote)
+                            .foregroundStyle(Color.drivyAlertText)
                     }
                 } footer: {
                     Text("Te daremos un código de 8 caracteres para invitar a tus amigos.")
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyInkMuted)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.drivyPaper)
             .navigationTitle("Nueva liga")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -253,6 +308,15 @@ private struct CreateLeagueSheet: View {
                 }
             }
         }
+    }
+}
+
+/// The Ligas list is one flat surface: rows sit on the paper of the screen and
+/// the hairline separators carry the structure, instead of a stack of cards (S3).
+private extension View {
+
+    func flatRow() -> some View {
+        listRowBackground(Color.drivyPaper)
     }
 }
 

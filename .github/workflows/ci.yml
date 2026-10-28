@@ -16,6 +16,12 @@
 #   test         — runs on every PR (and on main / manual dispatch):
 #                  `xcodegen generate` + `xcodebuild test` on an iPhone
 #                  simulator. Simulator builds need no Apple Developer team.
+#                  Steps: checkout → toolchain versions → install XcodeGen →
+#                  generate project (+ scheme/target guards) → SPM cache →
+#                  verify simulator → run unit tests (the design-gallery PNGs
+#                  of S8 go to `$RUNNER_TEMP/gallery` through
+#                  `TEST_RUNNER_GALLERY_DIR`) → upload test results on failure →
+#                  upload the `design-gallery` artifact on every run.
 #   build-release— runs only on `main` (and manual dispatch): generates the
 #                  project, archives Release for `generic/platform=iOS`, exports
 #                  a signed .ipa and uploads it to TestFlight. If the App Store
@@ -201,14 +207,33 @@ jobs:
 
       # S11: tests on an iPhone simulator for every PR. Simulator builds are
       # ad-hoc signed, so no Apple Developer team/secret is needed here.
+      #
+      # S8: `TEST_RUNNER_*` variables reach the test process, so the gallery
+      # test sees them as `GALLERY_DIR` and writes its light/dark PNGs into the
+      # folder uploaded by the step below.
       - name: Run unit tests
+        env:
+          TEST_RUNNER_GALLERY_DIR: ${{ runner.temp }}/gallery
         run: |
           set -o pipefail
+          mkdir -p "$RUNNER_TEMP/gallery"
           xcodebuild test \
             -project "$XCODEPROJ" \
             -scheme "$SCHEME" \
             -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
             -resultBundlePath TestResults/Drivy-tests.xcresult
+
+      # S8: the visual proof of the redesign. `if: always()` keeps the PNGs of a
+      # failing run, which is exactly when they are worth reading; an empty
+      # folder (build failure before the tests ran) only skips the upload.
+      - name: Upload design gallery
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: design-gallery
+          path: ${{ runner.temp }}/gallery
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload test results
         if: failure()

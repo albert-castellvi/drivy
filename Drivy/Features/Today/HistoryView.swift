@@ -25,19 +25,23 @@ struct HistoryView: View {
                 Text(
                     "Aún no hay días registrados. En cuanto completes un trayecto, aparecerá aquí."
                 )
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.drivyBody)
+                    .foregroundStyle(Color.drivyInkMuted)
             }
 
             ForEach(rows) { row in
                 switch row {
                 case .day(let day):
                     dayRow(day)
+                        .listRowBackground(Color.drivyPaper)
                 case .locked(let hiddenDays):
                     lockedRow(hiddenDays: hiddenDays)
+                        .listRowBackground(Color.drivyPaper)
                 }
             }
         }
+        .background(Color.drivyPaper)
+        .scrollContentBackground(.hidden)
         .navigationTitle("Histórico")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isPaywallPresented) {
@@ -48,47 +52,62 @@ struct HistoryView: View {
 
     // MARK: - Rows
 
+    /// One day of the history as a mark on the road: the score on a mini `KmPost`,
+    /// the date in the strong body role, and the counts in the footnote under it
+    /// (S5). No card: the list separators are the rules.
     private func dayRow(_ day: HistoryDay) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
+        HStack(spacing: 14) {
+            // The number speaks for itself inside the combined row: post first,
+            // then date and counts, exactly the visual order.
+            KmPost(
+                value: DriveFormat.score(day.score),
+                size: KmPostSize.marker
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
                 Text(DriveFormat.shortDay(day.date))
-                    .font(.headline)
+                    .font(.drivyBodyStrong)
+                    .foregroundStyle(Color.drivyInk)
 
-                Spacer(minLength: 0)
-
-                Text(DriveFormat.score(day.score))
-                    .font(.title3.monospacedDigit().weight(.semibold))
+                HStack(spacing: 8) {
+                    Text(DriveFormat.distance(day.distanceKm))
+                    Text("·")
+                    Text(DriveFormat.drivesCount(day.drivesCount))
+                }
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyInkMuted)
             }
 
-            HStack(spacing: 8) {
-                Text(DriveFormat.distance(day.distanceKm))
-                Text("·")
-                Text(DriveFormat.drivesCount(day.drivesCount))
-            }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
         }
         .padding(.vertical, 2)
+        // One element per row: post, date and counts are read in the order shown.
+        .accessibilityElement(children: .combine)
+        .contentShape(Rectangle())
     }
 
     /// One row for every day the free plan hides (S9), with the paywall one tap away.
     private func lockedRow(hiddenDays: Int) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(HistoryGating.lockedMessage, systemImage: "lock.fill")
-                .font(.subheadline)
+                .font(.drivyBody)
+                .foregroundStyle(Color.drivyInk)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(hiddenDays == 1 ? "1 día bloqueado" : "\(hiddenDays) días bloqueados")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyInkMuted)
 
             Button {
                 isPaywallPresented = true
             } label: {
                 Text(PaywallCopy.title)
+                    .font(.drivyBodyStrong)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            // Filled with the sign blue: the light dark-mode tint is for text, not fills.
+            .tint(Color.drivySignBlue)
         }
         .padding(.vertical, 4)
     }
