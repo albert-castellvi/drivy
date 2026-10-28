@@ -1,9 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// Tab "Hoy" (S1, S4, S6): manual drive recording, today's Driver Score, the streak
-/// v2, the XP, the quests of the day, the theory lesson and the list of the day's
-/// drives.
+/// Tab "Hoy" (S1, S4, S6, S5): the day as a stretch of road (mockup C).
+///
+/// The header carries the date, the Driver Score of the day on a `KmPost`, and
+/// one line with the streak, the freezes and the XP. The road itself — built by
+/// `TodayRoad` from the same snapshot the screen already read — puts the pending
+/// quests and the lesson ahead as signs, «Ahora» with the start/stop action and
+/// the live drive at the driver's position, and today's drives plus the earned
+/// quests behind, newest first.
 ///
 /// It is also where S9 shows up: the paywall after the first completed drive (once
 /// ever, never blocking) and the entry point to the Histórico, which is gated by the
@@ -26,37 +31,34 @@ struct TodayView: View {
     @StateObject private var model = TodayViewModel()
     @State private var activeSheet: TodaySheet?
 
-    /// Size of the hero Driver Score, scaled with Dynamic Type instead of frozen
-    /// at 44 pt: the score is the main number of the screen and has to grow with
-    /// the reader's preferred text size.
-    @ScaledMetric(relativeTo: .largeTitle) private var scoreSize: CGFloat = 44
-
     /// "Presented once ever" flag of the paywall (S9).
     private let paywallGate = FirstDrivePaywallGate()
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
-                    // T3: the manual button stays the primary action (S4).
-                    DriveCard(recorder: recorder)
+                VStack(alignment: .leading, spacing: 24) {
+                    TodayHeader(dateText: road.dateText, snapshot: model.snapshot)
 
                     if model.isLoading {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                     }
 
-                    scoreCard
-                    streakCard
-                    xpCard
-                    questsSection
-                    lessonCard
-                    drivesSection
+                    repairSection
+
+                    TodayRoadView(
+                        road: road,
+                        now: TodayNowValues(recorder: recorder),
+                        historyDays: model.snapshot.days,
+                        toggleRecording: toggleRecording,
+                        onLesson: { activeSheet = .lesson }
+                    )
 
                     if let errorMessage = model.errorMessage {
                         Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                            .font(.drivyFootnote)
+                            .foregroundStyle(Color.drivyAlertText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
@@ -64,6 +66,7 @@ struct TodayView: View {
                 }
                 .padding()
             }
+            .background(Color.drivyPaper)
             .navigationTitle("Hoy")
             .refreshable { await reload() }
             .task(id: auth.signedInUser?.id) { await reload() }
@@ -106,70 +109,37 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Sections
+    // MARK: - The road and its values
 
-    private var scoreCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Driver Score de hoy", systemImage: "speedometer")
-                .font(.headline)
-
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(DriveFormat.score(model.snapshot.score))
-                    .font(.system(size: scoreSize, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(DriveFormat.distance(model.snapshot.distanceKm))
-                    Text(DriveFormat.drivesCount(model.snapshot.drivesCount))
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            }
-
-            if model.snapshot.score == nil {
-                Text("Registra tu primer trayecto del día para tener nota.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .drivyCard()
+    /// The ordered road of the day (S5), rebuilt from the snapshot the screen
+    /// already holds plus the recorder state.
+    private var road: TodayRoad {
+        TodayRoad.stops(
+            from: model.snapshot,
+            isRecording: recorder.isRecording,
+            isSaving: recorder.isSaving,
+            now: Date()
+        )
     }
 
-    /// Streak v2 (S1): the run, what today needs, the freezes of the week and,
-    /// when a break is inside the S8 window, the premium repair or its upsell.
-    private var streakCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Racha", systemImage: "flame.fill")
-                .font(.headline)
-
-            Text(model.snapshot.streak.headline)
-                .font(.title3.weight(.semibold))
-
-            Text(model.snapshot.streak.detail(todayHasDirtyDriving: todayHasDirtyDriving))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Label(model.snapshot.streak.freezeText, systemImage: "snowflake")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            repairSection
+    private func toggleRecording() {
+        if recorder.isRecording {
+            Task { await recorder.stop() }
+        } else {
+            recorder.start()
         }
-        .drivyCard()
     }
 
     /// S8: the repair is a Premium advantage, so the free plan sees the upsell
-    /// here instead of the action.
+    /// here instead of the action. It is conditional, so it lives between the
+    /// header and the road only when a day is actually repairable.
     @ViewBuilder
     private var repairSection: some View {
         if model.snapshot.streak.repairableDay != nil {
             VStack(alignment: .leading, spacing: 8) {
                 Text(PaywallCopy.streakRepairWindowMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
                     .fixedSize(horizontal: false, vertical: true)
 
                 switch StreakRepairGate.decision(
@@ -183,27 +153,29 @@ struct TodayView: View {
                         Task { await repairStreak() }
                     } label: {
                         Text(StreakRepairGate.buttonTitle)
+                            .font(.drivyBodyStrong)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
 
                 case .locked:
                     Text(StreakRepairGate.upsellMessage)
-                        .font(.footnote)
+                        .font(.drivyFootnote)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Button {
                         activeSheet = .paywall
                     } label: {
                         Text(PaywallCopy.title)
+                            .font(.drivyBodyStrong)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
 
                 case .coolingDown(_):
                     Text(PaywallCopy.streakRepairCoolingDownMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyInkMuted)
                         .fixedSize(horizontal: false, vertical: true)
 
                 case .nothingToRepair, .unavailable:
@@ -213,168 +185,15 @@ struct TodayView: View {
         }
     }
 
-    /// S4: lifetime XP and the XP of this week. It is a figure that only grows and
-    /// never scales with km.
-    @ViewBuilder
-    private var xpCard: some View {
-        if let xp = model.snapshot.xp {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("XP", systemImage: "sparkles")
-                    .font(.headline)
-
-                HStack(spacing: 12) {
-                    DriveMetric(title: "Total", value: "\(xp.totalXP) XP")
-                    DriveMetric(title: "Esta semana", value: "\(xp.weekXP) XP")
-                }
-
-                Text("El XP premia cómo conduces y lo que aprendes, nunca los kilómetros.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .drivyCard()
-        }
-    }
-
-    /// S6: the three quests of the day.
-    @ViewBuilder
-    private var questsSection: some View {
-        if !model.snapshot.quests.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Misiones de hoy", systemImage: "target")
-                    .font(.headline)
-
-                ForEach(model.snapshot.quests) { progress in
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: progress.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(progress.isCompleted ? Color.accentColor : Color.secondary)
-                            .accessibilityHidden(true)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(progress.quest.title)
-                                .font(.subheadline.weight(.medium))
-
-                            Text(progress.quest.detail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                    // One element per quest: the icon only repeats the state the
-                    // title already has next to it.
-                    .accessibilityElement(children: .combine)
-                }
-
-                Text("Se renuevan cada día. Ninguna misión pide conducir más.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .drivyCard()
-        }
-    }
-
-    /// S2: the one-minute theory lesson, which is also a way to make the day count
-    /// without a car (S1).
-    private var lessonCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Lección de hoy", systemImage: "text.book.closed.fill")
-                .font(.headline)
-
-            Text(lessonMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                activeSheet = .lesson
-            } label: {
-                Text(lessonButtonTitle)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-        }
-        .drivyCard()
-    }
-
-    private var drivesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Trayectos de hoy")
-                    .font(.headline)
-
-                Spacer(minLength: 0)
-
-                // S9: the full history lives here, gated by the plan in force.
-                NavigationLink {
-                    HistoryView(days: model.snapshot.days)
-                } label: {
-                    Text("Histórico")
-                        .font(.subheadline)
-                        // HIG touch target: the bare text label was only ~20 pt
-                        // tall. The frame keeps it trailing, the shape makes the
-                        // whole 44 pt tappable.
-                        .frame(minHeight: 44, alignment: .trailing)
-                        .contentShape(Rectangle())
-                }
-            }
-
-            if model.snapshot.drives.isEmpty {
-                Text("Aún no hay trayectos hoy.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(model.snapshot.drives) { drive in
-                    NavigationLink {
-                        DriveDetailView(drive: drive)
-                    } label: {
-                        DriveSummaryRow(drive: drive)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .drivyCard()
-    }
-
     private var shareButton: some View {
         Button {
             activeSheet = .shareCard
         } label: {
             Label("Compartir mi tarjeta", systemImage: "square.and.arrow.up")
+                .font(.drivyBodyStrong)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
-    }
-
-    // MARK: - Copy of the lesson card
-
-    private var lessonMessage: String {
-        Streak.lessonMessage(
-            hasLessonToday: model.snapshot.hasLessonToday,
-            todayHasDirtyDriving: todayHasDirtyDriving
-        )
-    }
-
-    private var lessonButtonTitle: String {
-        model.snapshot.hasLessonToday ? "Repasar la lección" : "Hacer la lección (1 minuto)"
-    }
-
-    /// S1: today already has driving and its daily score is below the clean-day
-    /// threshold, so the day is ruled out: "Una lección ese mismo día no lo
-    /// rescata". The copy of the streak card and of the lesson card is branched on
-    /// this value so neither promises a day the rule refuses (B5).
-    ///
-    /// `snapshot.score` is the same daily score the streak rule received (the stored
-    /// `daily_scores` row, or today's drives aggregated when it is not written yet),
-    /// so the copy cannot disagree with `isTodayCounted`.
-    private var todayHasDirtyDriving: Bool {
-        Streak.hasDirtyDrivingToday(
-            dayScore: model.snapshot.score,
-            drivesCount: model.snapshot.drivesCount
-        )
     }
 
     // MARK: - S9 hooks
@@ -466,156 +285,211 @@ struct TodayView: View {
     }
 }
 
-/// One line of today's list: time, distance and score, with the detail one tap
-/// away.
-private struct DriveSummaryRow: View {
+// MARK: - Header of the road
 
-    let drive: DriveHistoryRow
+/// The header of Hoy (S5): the date, the Driver Score of the day on a `KmPost`,
+/// and one line with the streak, the freezes and the XP. The score post is empty
+/// (pending) until the day has a drive, exactly like a hito without a number.
+struct TodayHeader: View {
 
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(DriveFormat.time(drive.startedAt))
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
+    /// Long Spanish date of the day, from `TodayRoad.dateText`.
+    let dateText: String
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(DriveFormat.distance(drive.distanceKm))
-                    .font(.subheadline.weight(.medium))
-                Text(DriveFormat.duration(TimeInterval(drive.durationSeconds)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-
-            Text(DriveFormat.score(drive.score))
-                .font(.title3.monospacedDigit().weight(.semibold))
-
-            // The chevron only says "there is a detail screen": the row already
-            // opens it, so announcing "chevron right" only adds noise.
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
-        }
-        // One element per row: the numbers are read in the order they are shown.
-        .accessibilityElement(children: .combine)
-        .contentShape(Rectangle())
-    }
-}
-
-/// Manual start/stop button plus the live state of the drive (S4).
-private struct DriveCard: View {
-
-    @ObservedObject var recorder: DriveRecorder
+    /// The same snapshot `TodayView` renders the road from: the header and the
+    /// road can never disagree about a number.
+    let snapshot: TodaySnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: "car.fill")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(dateText)
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyInkMuted)
 
-            if showsStats {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    HStack(alignment: .top, spacing: 16) {
-                        metric("Tiempo", value: elapsedText(at: context.date))
-                        metric("Distancia", value: distanceText)
-                        metric("Nota", value: scoreText)
-                    }
-                    // One element instead of three stops while the drive runs;
-                    // the labels are already in reading order.
-                    .accessibilityElement(children: .combine)
+                    Text("Tu día en la carretera")
+                        .font(.drivyTitle)
+                        .foregroundStyle(Color.drivyInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    scorePost
+
+                    Text("Driver Score de hoy")
+                        .font(.drivyKicker)
+                        .foregroundStyle(Color.drivyInkMuted)
                 }
             }
 
-            if recorder.isRecording && recorder.connectedMode {
-                Label("Conducción conectada", systemImage: "iphone.radiowaves.left.and.right")
-                    .font(.subheadline)
-                    .foregroundStyle(.tint)
+            if snapshot.score == nil {
+                Text("Registra tu primer trayecto del día para tener nota.")
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button(action: toggleRecording) {
-                Text(buttonTitle)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(recorder.isSaving)
+            streakLine
 
-            if let errorMessage = recorder.errorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
+            Text(snapshot.streak.detail(todayHasDirtyDriving: todayHasDirtyDriving))
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyInkMuted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // The full sentence of the freezes only when there are none: that is
+            // when it warns, and the compact count would hide the warning.
+            if snapshot.streak.freezesLeftThisWeek == 0 {
+                Text(snapshot.streak.freezeText)
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyCautionText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if snapshot.xp != nil {
+                Text("El XP premia cómo conduces y lo que aprendes, nunca los kilómetros.")
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.quaternary)
+    }
+
+    /// Today's score on the hito of the day, or an empty pending post when the
+    /// day has no drive yet.
+    @ViewBuilder
+    private var scorePost: some View {
+        if let score = snapshot.score {
+            KmPost(value: DriveFormat.score(score), size: KmPostSize.score)
+        } else {
+            KmPost(isPending: true, size: KmPostSize.score) {
+                EmptyView()
+            }
+        }
+    }
+
+    /// One line: the streak run, the freezes left this week and the lifetime XP
+    /// (S4). The XP of this week was the old card's second figure; the road keeps
+    /// one number per idea, and the total is what the mockup shows.
+    private var streakLine: Text {
+        var line = Text(snapshot.streak.headline)
+            .font(.drivyBodyStrong)
+            .foregroundStyle(Color.drivyInk)
+
+        if snapshot.streak.freezesLeftThisWeek > 0 {
+            line = line + Text(" · \(TodayRoad.freezesCountText(snapshot.streak.freezesLeftThisWeek))")
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyInkMuted)
+        }
+
+        if let xp = snapshot.xp {
+            line = line + Text(" · \(xp.totalXP) XP")
+                .font(.drivyFootnote)
+                .foregroundStyle(Color.drivyInkMuted)
+        }
+
+        return line
+    }
+
+    /// S1: the same dirty-day test `TodayRoad.stops` uses for the lesson copy, so
+    /// the streak line and the lesson stop never promise different things (B5).
+    private var todayHasDirtyDriving: Bool {
+        Streak.hasDirtyDrivingToday(
+            dayScore: snapshot.score,
+            drivesCount: snapshot.drivesCount
         )
     }
+}
 
-    // MARK: - Copy
+// MARK: - The road
 
-    private var title: String {
-        if recorder.isRecording {
-            return "Trayecto en curso"
-        }
-        return recorder.lastCompletedDrive == nil ? "Registrar trayecto" : "Último trayecto"
-    }
+/// The plain values the «Ahora» stop renders, built by `TodayView` from the
+/// recorder so the stop (and the gallery) never needs the recorder itself.
+struct TodayNowValues {
 
-    private var buttonTitle: String {
-        if recorder.isSaving {
-            return "Guardando…"
-        }
-        return recorder.isRecording ? "Terminar trayecto" : "Empezar trayecto"
-    }
+    /// «Trayecto en curso» / «Registrar trayecto» / «Último trayecto».
+    var stateTitle: String
 
-    private var showsStats: Bool {
-        recorder.isRecording || recorder.lastCompletedDrive != nil
-    }
+    /// «Empezar trayecto» / «Terminar trayecto» / «Guardando…».
+    var buttonTitle: String
 
-    private var distanceText: String {
-        String(format: "%.1f km", recorder.distanceKm)
-    }
+    var isRecording: Bool
 
-    private var scoreText: String {
-        recorder.liveScore.map(String.init) ?? "—"
-    }
+    /// `true` while recording or right after a finished drive, as the old live
+    /// card did.
+    var showsStats: Bool
 
-    private func elapsedText(at date: Date) -> String {
-        let seconds = recorder.isRecording
-            ? recorder.elapsed(at: date)
-            : TimeInterval(recorder.lastCompletedDrive?.durationSeconds ?? 0)
-        return Self.formattedDuration(seconds)
-    }
+    var showsConnectedModeLabel: Bool
 
-    // MARK: - Actions
+    var distanceText: String
 
-    private func toggleRecording() {
-        if recorder.isRecording {
-            Task { await recorder.stop() }
+    var scoreText: String
+
+    /// The live elapsed clock, redrawn by the `TimelineView` of the stop.
+    var elapsedText: (Date) -> String
+
+    var errorMessage: String?
+
+    /// The recorder-backed values, with the copy the manual button has always
+    /// used (S6: byte-identical titles).
+    init(recorder: DriveRecorder) {
+        let recording = recorder.isRecording
+
+        if recording {
+            stateTitle = "Trayecto en curso"
+        } else if recorder.lastCompletedDrive == nil {
+            stateTitle = "Registrar trayecto"
         } else {
-            recorder.start()
+            stateTitle = "Último trayecto"
+        }
+
+        if recorder.isSaving {
+            buttonTitle = "Guardando…"
+        } else if recording {
+            buttonTitle = "Terminar trayecto"
+        } else {
+            buttonTitle = "Empezar trayecto"
+        }
+
+        isRecording = recording
+        showsStats = recording || recorder.lastCompletedDrive != nil
+        showsConnectedModeLabel = recording && recorder.connectedMode
+        distanceText = String(format: "%.1f km", recorder.distanceKm)
+        scoreText = recorder.liveScore.map(String.init) ?? "—"
+        errorMessage = recorder.errorMessage
+        elapsedText = { date in
+            let seconds = recording
+                ? recorder.elapsed(at: date)
+                : TimeInterval(recorder.lastCompletedDrive?.durationSeconds ?? 0)
+            return Self.formattedDuration(seconds)
         }
     }
 
-    // MARK: - Layout
-
-    private func metric(_ title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.title3.monospacedDigit())
-                .fontWeight(.semibold)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    /// The fixture path of the gallery: the same fields, given directly.
+    init(
+        stateTitle: String,
+        buttonTitle: String,
+        isRecording: Bool,
+        showsStats: Bool,
+        showsConnectedModeLabel: Bool,
+        distanceText: String,
+        scoreText: String,
+        elapsedText: @escaping (Date) -> String,
+        errorMessage: String?
+    ) {
+        self.stateTitle = stateTitle
+        self.buttonTitle = buttonTitle
+        self.isRecording = isRecording
+        self.showsStats = showsStats
+        self.showsConnectedModeLabel = showsConnectedModeLabel
+        self.distanceText = distanceText
+        self.scoreText = scoreText
+        self.elapsedText = elapsedText
+        self.errorMessage = errorMessage
     }
 
-    private static func formattedDuration(_ seconds: TimeInterval) -> String {
+    static func formattedDuration(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds.rounded()))
         let hours = total / 3600
         let minutes = (total % 3600) / 60
@@ -627,6 +501,341 @@ private struct DriveCard: View {
         }
         return "\(twoDigits(minutes)):\(twoDigits(remaining))"
     }
+}
+
+/// The road of the day itself (S5): `RoadTimeline` with the stops of `TodayRoad`
+/// in order — pending quests and lesson ahead, «Ahora» with the live drive, the
+/// drives of today and the earned quests behind — plus the navigation to the
+/// Histórico the old section header carried.
+///
+/// S9: the dashes move and a haptic marks the start and the end of a recording.
+struct TodayRoadView: View {
+
+    let road: TodayRoad
+
+    let now: TodayNowValues
+
+    /// Days for the Histórico link, the same the snapshot carries (S9).
+    let historyDays: [HistoryDay]
+
+    var toggleRecording: () -> Void = {}
+
+    var onLesson: () -> Void = {}
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            RoadTimeline(isMoving: road.now.isRecording) {
+                ForEach(road.ahead) { stop in
+                    if stop.role == .lesson {
+                        lessonStop(stop)
+                    } else {
+                        aheadStop(stop)
+                    }
+                }
+
+                if !road.ahead.isEmpty {
+                    // The old promise of the quest section, kept after the stops
+                    // it belongs to (S6: byte-identical).
+                    plainStop {
+                        Text("Se renuevan cada día. Ninguna misión pide conducir más.")
+                            .font(.drivyFootnote)
+                            .foregroundStyle(Color.drivyInkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                nowStop
+
+                ForEach(road.driveStops) { stop in
+                    driveStop(stop)
+                }
+
+                ForEach(road.doneQuestStops) { stop in
+                    doneQuestStop(stop)
+                }
+            }
+            .sensoryFeedback(.start, trigger: road.now.isRecording) { _, isRecording in isRecording }
+            .sensoryFeedback(.stop, trigger: road.now.isRecording) { _, isRecording in !isRecording }
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("Trayectos de hoy")
+                    .font(.drivyBodyStrong)
+                    .foregroundStyle(Color.drivyInk)
+
+                Spacer(minLength: 0)
+
+                // S9: the full history lives here, gated by the plan in force.
+                NavigationLink {
+                    HistoryView(days: historyDays)
+                } label: {
+                    Text("Histórico")
+                        .font(.drivyBody)
+                        // HIG touch target: the frame keeps it trailing, the shape
+                        // makes the whole 44 pt tappable.
+                        .frame(minHeight: 44, alignment: .trailing)
+                        .contentShape(Rectangle())
+                }
+            }
+
+            if road.driveStops.isEmpty {
+                Text("Aún no hay trayectos hoy.")
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
+            }
+        }
+    }
+
+    // MARK: - Stops
+
+    /// A pending quest ahead: its sign, its title, what it asks for.
+    private func aheadStop(_ stop: TodayRoad.AheadStop) -> some View {
+        RoadStop(sign: stop.sign) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Por delante")
+                    .font(.drivyKicker)
+                    .foregroundStyle(Color.drivyInkMuted)
+
+                Text(stop.title)
+                    .font(.drivyHeadline)
+                    .foregroundStyle(Color.drivyInk)
+
+                Text(stop.detail)
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// The lesson ahead, with the action that opens it. The stop owns a control,
+    /// so its text is not combined into the button's element.
+    private func lessonStop(_ stop: TodayRoad.AheadStop) -> some View {
+        RoadStop(sign: stop.sign, combinesText: false) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Por delante")
+                    .font(.drivyKicker)
+                    .foregroundStyle(Color.drivyInkMuted)
+
+                Text(stop.title)
+                    .font(.drivyHeadline)
+                    .foregroundStyle(Color.drivyInk)
+
+                Text(stop.detail)
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let actionTitle = stop.actionTitle {
+                    Button(action: onLesson) {
+                        Text(actionTitle)
+                            .font(.drivyBodyStrong)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+    }
+
+    /// «Ahora»: the position pin, the live drive while it records, and the
+    /// manual start/stop action as the directional sign of the road (S3, S9).
+    private var nowStop: some View {
+        RoadStop(combinesText: false, pin: { PositionPin() }) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Ahora")
+                    .font(.drivyKicker)
+                    .foregroundStyle(Color.drivyInkMuted)
+
+                Text(now.stateTitle)
+                    .font(.drivyHeadline)
+                    .foregroundStyle(Color.drivyInk)
+
+                if now.showsStats {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        HStack(alignment: .top, spacing: 16) {
+                            nowMetric("Tiempo", value: now.elapsedText(context.date))
+                            nowMetric("Distancia", value: now.distanceText)
+                            nowMetric("Nota", value: now.scoreText)
+                        }
+                        // One element instead of three stops while the drive runs;
+                        // the labels are already in reading order.
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+
+                if now.showsConnectedModeLabel {
+                    Text("Conducción conectada")
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyTint)
+                }
+
+                Button(action: toggleRecording) {
+                    Text(now.buttonTitle)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.directionSign)
+                .disabled(road.now.action == .saving)
+
+                if let errorMessage = now.errorMessage {
+                    Text(errorMessage)
+                        .font(.drivyFootnote)
+                        .foregroundStyle(Color.drivyAlertText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// A finished drive behind the position, newest first: time · score ·
+    /// duration, its events as small signs, and the detail one tap away.
+    private func driveStop(_ stop: TodayRoad.DriveStop) -> some View {
+        RoadStop(combinesText: false, pin: { DriveDotPin() }) {
+            NavigationLink {
+                DriveDetailView(drive: stop.drive)
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("\(stop.timeText) · \(stop.scoreText) · \(stop.durationText)")
+                        .font(.drivyHeadline)
+                        .foregroundStyle(Color.drivyInk)
+
+                    if !stop.events.isEmpty {
+                        HStack(spacing: 8) {
+                            ForEach(stop.events) { event in
+                                RoadSign(
+                                    kind: event.sign,
+                                    size: RoadMetrics.minSignSize,
+                                    accessibilityLabel: event.accessibilityLabel
+                                )
+                            }
+                        }
+                    }
+                }
+                // One element per row: the numbers and the event counts are read
+                // in the order they are shown.
+                .accessibilityElement(children: .combine)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// A quest earned today, behind the drives, with its sign muted and the
+    /// green tick of the completed thing it is.
+    private func doneQuestStop(_ stop: TodayRoad.DoneQuestStop) -> some View {
+        RoadStop(pin: { DoneQuestPin(sign: stop.sign) }) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Completada")
+                    .font(.drivyKicker)
+                    .foregroundStyle(Color.drivyGo)
+
+                Text(stop.title)
+                    .font(.drivyHeadline)
+                    .foregroundStyle(Color.drivyInk)
+
+                Text(stop.detail)
+                    .font(.drivyFootnote)
+                    .foregroundStyle(Color.drivyInkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// A line of the road that is not a stop: its pin slot stays empty, so the
+    /// asphalt runs behind it uninterrupted.
+    private func plainStop<Content: View>(
+        @ViewBuilder _ content: () -> Content
+    ) -> some View {
+        RoadStop(pin: { Color.clear.frame(width: 1, height: 1) }, content: content)
+    }
+
+    private func nowMetric(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.drivyKicker)
+                .foregroundStyle(Color.drivyInkMuted)
+
+            Text(value)
+                .font(.drivyHeadline)
+                .monospacedDigit()
+                .foregroundStyle(Color.drivyInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Pins of the road
+
+/// The position of the driver on the road (S5): an amber arrow on a dark disc,
+/// the way the mockup marks «you are here». The disc is `signGlyph` — fixed dark
+/// in both appearances — because the arrow sits on it, exactly like a sign face:
+/// `drivyInk` would flip to near-white in dark mode and swallow the amber.
+private struct PositionPin: View {
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.drivySignGlyph)
+
+            Circle()
+                .stroke(Color.drivyLaneMark, lineWidth: 3)
+
+            Image(systemName: "location.north.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.drivyCaution)
+        }
+        .frame(width: 44, height: 44)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The small neutral mark of a drive that already happened.
+private struct DriveDotPin: View {
+
+    var body: some View {
+        Circle()
+            .fill(Color.drivySignFace)
+            .overlay(
+                Circle()
+                    .stroke(Color.drivyInkMuted, lineWidth: 2.5)
+            )
+            .frame(width: 18, height: 18)
+            .accessibilityHidden(true)
+    }
+}
+
+/// The sign of a completed quest, muted, with the green tick of the done thing
+/// (S5). Decorative: the stop reads «Completada» in words.
+private struct DoneQuestPin: View {
+
+    let sign: RoadSign.Kind
+
+    var body: some View {
+        RoadSign(kind: sign, size: 32)
+            .opacity(0.65)
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.drivyGoTick)
+                    .frame(width: 16, height: 16)
+                    .background(Circle().fill(Color.drivyGo))
+                    .offset(x: 4, y: 2)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+fileprivate extension Color {
+
+    /// The tick of a completed quest sits on `go`, which flips to a light green
+    /// in dark mode; the tick takes the ink of the opposite appearance so the
+    /// pair stays readable in both (S7: the road never fixes a colour pair the
+    /// tokens cannot serve).
+    static let drivyGoTick = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? DrivyToken.ink.light
+            : DrivyToken.ink.dark
+    })
 }
 
 #Preview {
