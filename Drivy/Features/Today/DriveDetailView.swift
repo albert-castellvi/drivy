@@ -125,7 +125,7 @@ struct DriveDetailView: View {
             if drive.connectedMode {
                 DriveHairlineRule().padding(.vertical, 6)
 
-                Text("Conducción conectada: el uso del móvil no penaliza (S13).")
+                Text("Conducción conectada: el uso del móvil no penaliza.")
                     .font(.drivyFootnote)
                     .foregroundStyle(Color.drivyInkMuted)
                     .fixedSize(horizontal: false, vertical: true)

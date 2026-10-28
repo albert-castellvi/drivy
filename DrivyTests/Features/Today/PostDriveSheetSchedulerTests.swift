@@ -131,6 +131,54 @@ final class PostDriveSheetSchedulerTests: XCTestCase {
         XCTAssertEqual(step, PostDriveSheetScheduler.Step.stay)
     }
 
+    // MARK: - U3: the lesson keeps the slot while it is being answered
+
+    /// U3: a lesson being answered owns the sheet slot. A drive that ends in the
+    /// meantime must not replace it: the answers of the quiz live only in its view
+    /// model, so a sheet swap destroys them with no write.
+    func testAFinishedDriveWhileTheLessonIsOpenIsDeferred() {
+        let drive = makeDrive()
+
+        let step = PostDriveSheetScheduler.driveDidComplete(drive, shownSheet: .lesson)
+
+        XCTAssertNil(step.nextSheet, "the lesson must stay on screen")
+        XCTAssertEqual(step.deferredSheet, TodaySheet.debrief(drive), "the debrief is owed")
+        XCTAssertFalse(step.consumesPaywallGate)
+    }
+
+    /// U3 + S2: the deferred debrief is what the lesson leaves behind, and it still
+    /// comes before the S9 paywall of the first drive.
+    func testTheDeferredDebriefIsPresentedWhenTheLessonCloses() {
+        let drive = makeDrive()
+
+        let step = PostDriveSheetScheduler.afterSheetClosed(
+            deferred: TodaySheet.debrief(drive),
+            paywall: paywallState()
+        )
+
+        XCTAssertEqual(step.nextSheet, TodaySheet.debrief(drive))
+        XCTAssertFalse(step.consumesPaywallGate, "only the paywall consumes the gate")
+    }
+
+    /// Only the lesson is worth keeping: nothing is being typed into the other
+    /// sheets, so the debrief still opens at once (S2).
+    func testOnlyTheLessonDefersTheDebrief() {
+        let drive = makeDrive()
+
+        let step = PostDriveSheetScheduler.driveDidComplete(drive, shownSheet: .shareCard)
+
+        XCTAssertEqual(step.nextSheet, TodaySheet.debrief(drive))
+        XCTAssertNil(step.deferredSheet)
+    }
+
+    /// S9: with nothing owed, closing a sheet still opens the paywall when it is due.
+    func testClosingASheetWithNothingOwedStillOpensThePaywall() {
+        let step = PostDriveSheetScheduler.afterSheetClosed(deferred: nil, paywall: paywallState())
+
+        XCTAssertEqual(step.nextSheet, TodaySheet.paywall)
+        XCTAssertTrue(step.consumesPaywallGate)
+    }
+
     // MARK: - Identity of the sheets
 
     /// A second drive is a different sheet: `.sheet(item:)` presents it instead of
